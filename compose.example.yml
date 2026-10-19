@@ -1,0 +1,38 @@
+name: web-slides-studio
+services:
+  studio:
+    build: .
+    image: web-slides-studio:local
+    restart: unless-stopped
+    init: true
+    environment:
+      HOST: 0.0.0.0
+      DATA_DIR: /data
+      PORT: 4310
+      CONTENT_PORT: 4311
+      STUDIO_PASSWORD: ${STUDIO_PASSWORD:?Set an initial password in .env}
+      APP_ORIGIN: ${APP_ORIGIN:?Set your HTTPS manager origin}
+      CONTENT_ORIGIN: ${CONTENT_ORIGIN:?Set a different HTTPS content origin}
+    ports:
+      - '127.0.0.1:4310:4310'
+      - '127.0.0.1:4311:4311'
+    volumes:
+      - ./data:/data
+    read_only: true
+    tmpfs:
+      - /tmp:size=1g,mode=1777
+    shm_size: 256m
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 2g
+    cpus: 2
+    pids_limit: 256
+    networks: [isolated]
+    healthcheck:
+      test: [CMD, node, -e, "require('http').get('http://127.0.0.1:4310/health',{headers:{Host:new URL(process.env.APP_ORIGIN).host}},r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+networks:
+  isolated:
+    internal: true

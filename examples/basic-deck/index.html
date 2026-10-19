@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>나의 첫 웹 발표</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;background:#0b1622;color:#edf7f5;font-family:Arial,sans-serif;overflow:hidden}
+#stage{position:relative;width:1920px;height:1080px;transform-origin:0 0}
+.slide{position:absolute;inset:0;padding:100px;display:none;overflow:hidden}.slide.active{display:block}
+h1{font-size:112px;line-height:1.15;max-width:1200px;margin:110px 0 50px}h2{font-size:80px;margin:100px 0 50px}p,li{font-size:38px;line-height:1.6}.eyebrow{font-size:24px;color:#62d9c3;letter-spacing:5px}
+.orbit{position:absolute;right:90px;bottom:100px;width:500px;height:500px;border:2px solid #62d9c3;border-radius:50%;opacity:.25;animation:drift 6s ease-in-out infinite;pointer-events:none}
+.orbit:after{content:'';position:absolute;inset:60px;border:1px solid #62d9c3;border-radius:40%;transform:rotate(30deg)}
+@keyframes drift{50%{transform:translateY(-35px) rotate(25deg)}}.footer{position:absolute;bottom:60px;font-size:22px;color:#8ca4af}
+@media(prefers-reduced-motion:reduce){.orbit{animation:none}}
+</style>
+</head>
+<body><main id="stage">
+<section class="slide active"><div class="orbit"></div><p class="eyebrow">WEB SLIDES / START HERE</p><h1>생각을 담고,<br>바로 발표하세요.</h1><p>이 제목을 선택하고 나만의 이야기로 바꿔보세요.</p><p class="footer">01 / 02 · 화살표 키로 다음 장</p></section>
+<section class="slide"><p class="eyebrow">YOUR WORKFLOW</p><h2>웹 원본 하나로 시작합니다.</h2><ul><li>폴더 또는 ZIP으로 자료를 등록합니다.</li><li>글과 이미지를 수정하고 서버에 저장합니다.</li><li>웹으로 발표하거나 PDF·PPTX로 내려받습니다.</li></ul><p class="footer">02 / 02 · 외부 라이브러리 없는 기본 예제</p></section>
+</main>
+<script>
+let current=0;
+function fit(){const stage=document.getElementById('stage');stage.style.transform='scale('+Math.min(innerWidth/1920,innerHeight/1080)+')';}
+addEventListener('resize',fit);fit();
+addEventListener('keydown',e=>{if(window.__sd)return;if(['ArrowRight','ArrowLeft'].includes(e.key)){current=Math.max(0,Math.min(1,current+(e.key==='ArrowRight'?1:-1)));document.querySelectorAll('.slide').forEach((s,i)=>s.classList.toggle('active',i===current));}});
+</script></body></html>

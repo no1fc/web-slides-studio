@@ -1,0 +1,22 @@
+{
+  "name": "web-slides-studio",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test test/*.test.js",
+    "test:e2e": "node --test test/editor-recovery.test.js test/settings-ui.test.js"
+  },
+  "dependencies": {
+    "jszip": "3.10.1",
+    "linkedom": "0.18.12",
+    "pdf-lib": "1.17.1",
+    "playwright": "1.63.0",
+    "pptxgenjs": "4.0.1"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT"
+}

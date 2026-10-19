@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SDLAB Slides · 발표 자료실</title>
+    <link rel="stylesheet" href="/style.css" />
+    <script defer src="/jszip.min.js"></script>
+    <script defer src="/app.js"></script>
+  </head>
+  <body>
+    <div id="toast" role="status" hidden></div>
+    <section id="login" hidden>
+      <form id="loginForm">
+        <div class="wordmark">SDLAB <span>Slides</span></div>
+        <h1>자료실에 로그인</h1>
+        <p>발표 자료를 만들고, 수정하고, 공유하세요.</p>
+        <label
+          >관리자 암호<input
+            type="password"
+            id="password"
+            autocomplete="current-password"
+            required /></label
+        ><button class="primary" type="submit">로그인</button>
+        <p id="loginError" role="alert"></p>
+      </form>
+    </section>
+    <div id="shell" hidden>
+      <header class="topbar">
+        <button class="wordmark plain" id="homeBtn">
+          SDLAB <span>Slides</span>
+        </button>
+        <div class="top-caption">생각을 담고, 바로 발표하세요.</div>
+        <span id="localBadge" class="badge">개인 자료실</span
+        ><button id="passwordBtn" class="quiet">비밀번호 변경</button
+        ><button id="logoutBtn" class="quiet">로그아웃</button>
+      </header>
+      <section id="library">
+        <aside class="sidebar">
+          <div class="nav-label">워크스페이스</div>
+          <button id="allBtn" class="nav-item selected">
+            ▤ &nbsp; 모든 발표 자료
+          </button>
+          <div id="folders"></div>
+          <button id="trashBtn" class="nav-item">⌫ &nbsp; 휴지통</button>
+          <div class="sidebar-note">
+            웹 원본 하나로<br />발표부터 다운로드까지.
+          </div>
+        </aside>
+        <main class="library-main">
+          <div class="library-head">
+            <div>
+              <div class="eyebrow">MY PRESENTATIONS</div>
+              <h1 id="libraryTitle">나의 발표 자료</h1>
+              <p>폴더에 담긴 발표를, 언제 어디서든.</p>
+            </div>
+            <div class="actions">
+              <button id="newBtn">빈 자료 만들기</button
+              ><button id="uploadBtn" class="primary">＋ 자료 올리기</button>
+            </div>
+          </div>
+          <div class="library-tools">
+            <label class="search"
+              ><span>⌕</span
+              ><input
+                id="search"
+                type="search"
+                placeholder="발표 제목이나 폴더 검색"
+                aria-label="자료 검색" /></label
+            ><span id="deckCount" class="muted"></span>
+          </div>
+          <div id="deckGrid" class="deck-grid"></div>
+          <div id="empty" class="empty">
+            <div class="empty-symbol">▱</div>
+            <h2>첫 번째 발표 자료를 올려보세요</h2>
+            <p>
+              HTML과 이미지, 글꼴이 담긴 ZIP 또는 폴더를 올리세요.<br />Three.js
+              배경도 함께 보관됩니다.
+            </p>
+            <div class="actions">
+              <button id="emptyUpload" class="primary">ZIP 파일 올리기</button
+              ><button id="folderBtn">폴더 선택</button>
+            </div>
+            <small>ZIP 최대 40MB · 압축 해제 64MB · 300개 파일</small>
+          </div>
+          <div class="import-note">
+            기존 PDF·PPTX 파일은 필요하지 않습니다. 저장한 웹 원본에서 다시 만들
+            수 있어요.
+            <button id="folderUploadBtn" class="text-button">
+              폴더로 올리기
+            </button>
+          </div>
+        </main>
+      </section>
+      <section id="editor" hidden>
+        <div class="editor-toolbar">
+          <button id="libraryBtn" class="quiet">← 자료실</button
+          ><input id="deckTitle" aria-label="자료 제목" /><span
+            id="saveStatus"
+            role="status"
+            >불러오는 중</span
+          >
+          <div class="toolbar-spacer"></div>
+          <button id="undoBtn" title="실행 취소 (Ctrl+Z)">↶</button
+          ><button id="redoBtn" title="다시 실행 (Ctrl+Shift+Z)">↷</button
+          ><button id="filesBtn">파일 관리</button
+          ><button id="versionsBtn">버전</button
+          ><button id="previewBtn">▷ 발표</button
+          ><button id="shareBtn">공유</button
+          ><button id="exportBtn" class="primary">다운로드 ↓</button>
+        </div>
+        <div class="mobile-note">
+          직접 배치 편집은 넓은 PC 화면에서 이용해 주세요. 발표와 다운로드는
+          여기서도 가능합니다.
+        </div>
+        <div class="editor-body">
+          <aside class="slide-rail">
+            <div class="rail-head">
+              <strong>슬라이드</strong
+              ><button id="addSlideBtn" title="빈 슬라이드 추가">＋</button>
+            </div>
+            <div id="slideList"></div>
+            <div class="slide-actions">
+              <button id="upSlideBtn" title="위로 이동">↑</button
+              ><button id="downSlideBtn" title="아래로 이동">↓</button
+              ><button id="duplicateSlideBtn">복제</button
+              ><button id="removeSlideBtn" title="슬라이드 삭제">삭제</button>
+            </div>
+          </aside>
+          <main class="canvas-main">
+            <div class="canvas-tools">
+              <span id="slideLabel">1 / 21</span
+              ><span>요소를 선택하고 드래그해 배치하세요</span
+              ><span class="size-label">16:9</span>
+            </div>
+            <div id="canvasWrap">
+              <iframe
+                id="deckFrame"
+                title="발표 자료 편집 화면"
+                sandbox="allow-scripts allow-same-origin"
+                allow="fullscreen"
+              ></iframe>
+            </div>
+            <div class="canvas-footer">
+              <span>더블클릭으로 글 수정 · 드래그로 이동</span
+              ><span id="selectedLabel">선택한 요소 없음</span>
+            </div>
+          </main>
+          <aside class="inspector">
+            <div class="inspector-tabs">
+              <strong>편집</strong><span>선택한 요소</span>
+            </div>
+            <div class="add-tools">
+              <button id="addTextBtn">T 글</button
+              ><button id="addImageBtn">▧ 이미지</button
+              ><button id="addShapeBtn">□ 도형</button>
+            </div>
+            <div id="noSelection">
+              <p>슬라이드의 글이나 이미지를<br />클릭해 보세요.</p>
+            </div>
+            <div id="properties" hidden>
+              <label id="textField"
+                >내용<textarea id="textValue" rows="5"></textarea></label
+              ><button id="replaceImageBtn" hidden>이미지 교체</button>
+              <div class="prop-grid">
+                <label
+                  >가로 이동<input
+                    id="xValue"
+                    type="number"
+                    min="-5000"
+                    max="5000" /></label
+                ><label
+                  >세로 이동<input
+                    id="yValue"
+                    type="number"
+                    min="-5000"
+                    max="5000" /></label
+                ><label
+                  >너비<input
+                    id="wValue"
+                    type="number"
+                    min="1"
+                    max="5000" /></label
+                ><label
+                  >높이<input
+                    id="hValue"
+                    type="number"
+                    min="1"
+                    max="5000" /></label
+                ><label
+                  >회전 °<input
+                    id="rotateValue"
+                    type="number"
+                    min="-360"
+                    max="360" /></label
+                ><label
+                  >글자 크기<input
+                    id="fontValue"
+                    type="number"
+                    min="6"
+                    max="400"
+                /></label>
+              </div>
+              <div class="prop-grid">
+                <label>글자 색<input id="colorValue" type="color" /></label
+                ><label>배경 색<input id="fillValue" type="color" /></label>
+              </div>
+              <button id="removeElementBtn" class="danger-text">
+                선택한 요소 숨기기
+              </button>
+            </div>
+            <div class="background-panel">
+              <h3>발표 배경</h3>
+              <label class="switch-row"
+                ><span>3D 배경 표시</span
+                ><input id="backgroundValue" type="checkbox" checked /></label
+              ><label
+                >현재 슬라이드 장면<select id="sceneValue">
+                  <option value="">원본 유지</option>
+                </select></label
+              >
+              <p>
+                원본의 Three.js 배경을 유지합니다.<br />장면 선택은 자료가
+                제공하는 설정을 사용합니다.
+              </p>
+            </div>
+          </aside>
+        </div>
+      </section>
+    </div>
+    <input id="zipInput" type="file" accept=".zip" hidden /><input
+      id="folderInput"
+      type="file"
+      webkitdirectory
+      multiple
+      hidden
+    /><input
+      id="imageInput"
+      type="file"
+      accept="image/png,image/jpeg,image/webp,image/gif"
+      hidden
+    />
+    <dialog id="dialog">
+      <div class="dialog-head">
+        <h2 id="dialogTitle"></h2>
+        <button id="closeDialog" aria-label="닫기">×</button>
+      </div>
+      <div id="dialogBody"></div>
+    </dialog>
+    <div id="busyOverlay" hidden>
+      <div class="spinner"></div>
+      <strong id="busyText">자료를 가져오는 중입니다</strong>
+      <p>원본 파일과 연결된 자산을 확인하고 있습니다.</p>
+    </div>
+  </body>
+</html>
