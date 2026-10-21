@@ -1,7 +1,9 @@
 import { parseHTML } from "linkedom";
 import { record, normalizeCode, codeIds, renderAuthoring } from "./authoring.js";
 import "../public/text-model.js";
+import "../public/object-model.js";
 const { normalizeRichText, normalizeTextBox, renderRichText } = globalThis.SDText;
+const Objects = globalThis.SDObjects;
 const tags = "h1,h2,h3,h4,p,li,td,th,img,blockquote,figcaption,code,span,div";
 const num = (x, min, max) =>
   typeof x === "number" && Number.isFinite(x) && x >= min && x <= max;
@@ -77,6 +79,16 @@ export function migrateState(raw) {
     validateTextFields(added);
   }
   const state = structuredClone(raw);
+  // Earlier rectangles were ordinary DIVs and supported text editing. Preserve
+  // those labels as text boxes before introducing the generated SVG shape body.
+  for (const added of state.added || []) {
+    const patch = state.patches?.[added.id] || {};
+    if (added.kind === "shape" && !Object.hasOwn(added, "shape") && !Object.hasOwn(patch, "shape") &&
+      ["text", "richText", "textBox"].some(key => Object.hasOwn(added, key) || Object.hasOwn(patch, key))) {
+      added.kind = "text";
+      if (!Object.hasOwn(added, "fontSize") && !Object.hasOwn(patch, "fontSize")) added.inheritFontSize = true;
+    }
+  }
   state.schemaVersion = 1;
   for (const key of ["clones", "scenes", "slideCode", "masters", "slideMasters"]) {
     if (!Object.hasOwn(state, key)) state[key] = {};
@@ -101,10 +113,17 @@ const patchKeys = new Set([
   "locked",
   "z",
   "layerPosition",
+  "image",
+  "shape",
+  "textMetricsScale",
+  "inheritFontSize",
 ]);
 function validateTextFields(patch) {
   if (Object.hasOwn(patch, "richText")) normalizeRichText(patch.richText);
   if (Object.hasOwn(patch, "textBox")) normalizeTextBox(patch.textBox);
+  if (Object.hasOwn(patch, "image")) Objects.normalizeImage(patch.image);
+  if (Object.hasOwn(patch, "shape")) Objects.normalizeShape(patch.shape);
+  if (Object.hasOwn(patch, "group")) Objects.normalizeGroup(patch.group);
 }
 function validPatch(p) {
   record(p, "편집 데이터");
@@ -112,14 +131,13 @@ function validPatch(p) {
     if (!patchKeys.has(k)) throw new Error("허용되지 않는 편집 항목입니다.");
     if (k === "richText") p.richText = normalizeRichText(v);
     if (k === "textBox") p.textBox = normalizeTextBox(v);
+    if (k === "image") p.image = Objects.normalizeImage(v);
+    if (k === "shape") p.shape = Objects.normalizeShape(v);
+    if (k === "textMetricsScale" && !num(v, .01, 100)) throw new Error("텍스트 간격 배율 오류");
+    if (k === "inheritFontSize" && typeof v !== "boolean") throw new Error("텍스트 글꼴 상속 값 오류");
     if (k === "text" && (typeof v !== "string" || v.length > (Object.hasOwn(p, "richText") ? 100000 : 20000)))
       throw new Error("텍스트가 너무 깁니다.");
-    if (
-      k === "src" &&
-      (typeof v !== "string" ||
-        !/^assets\/[a-zA-Z0-9_-]+\.(png|jpg|jpeg|webp|gif)$/.test(v))
-    )
-      throw new Error("허용되지 않는 이미지 경로입니다.");
+    if (k === "src") Objects.safeImageSource(v);
     if (["x", "y"].includes(k) && !num(v, -5000, 5000))
       throw new Error("위치 값 오류");
     if (["w", "h"].includes(k) && !num(v, 1, 5000))
@@ -188,11 +206,11 @@ export function validateState(raw, deck) {
       !/^a-[a-z0-9-]{1,50}$/.test(a.id) ||
       ids.has(a.id) ||
       !slideIds.has(a.slide) ||
-      !["text", "image", "shape", "html"].includes(a.kind)
+      !["text", "image", "shape", "html", "group"].includes(a.kind)
     )
       throw new Error("추가 요소 오류");
     ids.add(a.id);
-    const { id, slide, kind, html, ...p } = a;
+    const { id, slide, kind, html, group, ...p } = a;
     if (kind === "html") {
       a.html = normalizeCode({ name: "object", html, css: "" }, id, new Set(), true).html;
       const { document } = parseHTML("<html><body>" + a.html + "</body></html>");
@@ -201,6 +219,9 @@ export function validateState(raw, deck) {
           throw new Error("복제 개체 내부에는 ID를 사용할 수 없습니다.");
       }
     } else if (Object.hasOwn(a, "html")) throw new Error("HTML은 복제 개체에서만 사용할 수 있습니다.");
+    if (kind === "group") a.group = Objects.normalizeGroup(group);
+    else if (Object.hasOwn(a, "group")) throw new Error("그룹 속성은 그룹 개체에서만 사용할 수 있습니다.");
+    if (Object.hasOwn(p, "image") && kind !== "image" || Object.hasOwn(p, "shape") && kind !== "shape" || ["textMetricsScale", "inheritFontSize"].some(key => Object.hasOwn(p, key)) && kind !== "text") throw new Error("개체 종류와 편집 속성이 다릅니다.");
     validPatch(p);
     Object.assign(a, p);
   }
@@ -213,7 +234,22 @@ export function validateState(raw, deck) {
   for (const [id, p] of Object.entries(state.patches)) {
     if (!ids.has(id)) throw new Error("알 수 없는 요소입니다.");
     validPatch(p);
+    const added = state.added.find(item => item.id === id);
+    if (Object.hasOwn(p, "image") && added?.kind !== "image" || Object.hasOwn(p, "shape") && added?.kind !== "shape" || ["textMetricsScale", "inheritFontSize"].some(key => Object.hasOwn(p, key)) && added?.kind !== "text") throw new Error("개체 종류와 편집 속성이 다릅니다.");
   }
+  let total = 0;
+  const count = object => { total++; for (const child of object.group?.children || []) count(child); };
+  for (const a of state.added) {
+    count(a);
+    const effective = { ...a, ...(state.patches[a.id] || {}) };
+    if (a.kind === "image") Objects.safeImageSource(effective.src);
+    if (a.kind === "shape" && ["text", "richText", "textBox"].some(key => Object.hasOwn(effective, key))) throw new Error("도형 라벨은 텍스트 상자를 추가해 사용해 주세요.");
+    if (a.kind === "group") {
+      const { id, slide, ...object } = effective;
+      Objects.normalizeObject(object);
+    }
+  }
+  if (total > 500) throw new Error("그룹 내부를 포함한 추가 요소는 500개까지 사용할 수 있습니다.");
   for (const [id, scene] of Object.entries(state.scenes)) {
     if (
       !slideIds.has(id) ||
@@ -256,6 +292,7 @@ export function applyPatch(e, p) {
     e.style.webkitTextFillColor = p.color;
   }
   if (p.fill) e.style.background = p.fill;
+  if (p.textMetricsScale !== undefined) e.setAttribute("data-sd-text-metrics-scale", String(p.textMetricsScale));
   if (p.richText !== undefined || p.textBox !== undefined) renderRichText(e, p.richText, p.textBox);
   if (p.layerPosition === "relative") {
     e.style.position = "relative";
@@ -301,7 +338,8 @@ export function renderDeck(html, state) {
   for (const a of state.added || []) {
     const s = all.get(a.slide);
     if (!s) continue;
-    let e = document.createElement(a.kind === "image" ? "img" : "div");
+    const effective = { ...a, ...(state.patches[a.id] || {}) };
+    let e = ["image", "shape", "group"].includes(a.kind) ? Objects.createElement(document, effective) : document.createElement("div");
     if (a.kind === "html") {
       e.innerHTML = a.html;
       const content = [...e.childNodes].filter(node => node.nodeType === 1 || node.textContent.trim());
@@ -310,12 +348,14 @@ export function renderDeck(html, state) {
     }
     e.setAttribute("data-sd-id", a.id);
     e.setAttribute("data-sd-added", "true");
+    e.setAttribute("data-sd-kind", a.kind);
     e.style.cssText += ";" + (
       a.kind === "html"
         ? "position:absolute;left:0px;top:0px;margin:0px;box-sizing:border-box;z-index:20;"
         : "position:absolute;left:0;top:0;z-index:20;white-space:pre-wrap;");
-    if (a.kind === "text") e.style.fontSize = "48px";
-    applyPatch(e, { ...a, ...(state.patches[a.id] || {}) });
+    if (a.kind === "text" && !effective.inheritFontSize) e.style.fontSize = "48px";
+    applyPatch(e, effective);
+    if (["image", "shape", "group"].includes(a.kind)) Objects.applyVisual(e, effective);
     s.append(e);
   }
   for (const e of document.querySelectorAll("[data-sd-id]")) {

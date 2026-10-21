@@ -18,6 +18,7 @@ export function canExportNativeText(element) {
 /** Map the displayed document pixels to a 1920px-wide, 13 1/3 inch slide. */
 export function pptxText(element, objectName) {
   const scale = Math.max(0, Math.min(1, number(element.fontScale, 1)));
+  const metricsScale = Math.max(0.01, number(element.textMetricsScale, 1));
   const fontSize = (value) => points(Math.max(6, number(value, number(element.fontSize, 32)) * scale));
   const paragraphs = element.richText?.paragraphs || String(element.text || "").split(/\r?\n/).map(text => ({ runs: [{ text }] }));
   const runs = [];
@@ -34,11 +35,11 @@ export function pptxText(element, objectName) {
     else counters[indent] = 0;
     const lineHeight = number(paragraph.lineHeight, number(element.lineHeight, 1.2));
     const after = points(number(paragraph.spaceAfter, 0) * scale);
-    const left = points((indent * 32 + (list === "none" ? 0 : 24)) * scale);
+    const left = points((indent * 32 + (list === "none" ? 0 : 24)) * scale * metricsScale);
     const bullet = list === "number"
       ? `<a:buAutoNum type="arabicPeriod" startAt="${counters[indent]}"/>`
       : list === "bullet" ? '<a:buChar char="&#x2022;"/>' : "<a:buNone/>";
-    paragraphXml.push(`<a:pPr algn="${({ left: "l", center: "ctr", right: "r", justify: "just" })[align] || "l"}" lvl="${indent}" marL="${emu(left)}" indent="${list === "none" ? 0 : -emu(12 * scale)}"><a:lnSpc><a:spcPct val="${Math.round(lineHeight * 100000)}"/></a:lnSpc><a:spcAft><a:spcPts val="${Math.round(after * 100)}"/></a:spcAft>${bullet}</a:pPr>`);
+    paragraphXml.push(`<a:pPr algn="${({ left: "l", center: "ctr", right: "r", justify: "just" })[align] || "l"}" lvl="${indent}" marL="${emu(left)}" indent="${list === "none" ? 0 : -emu(12 * scale * metricsScale)}"><a:lnSpc><a:spcPct val="${Math.round(lineHeight * 100000)}"/></a:lnSpc><a:spcAft><a:spcPts val="${Math.round(after * 100)}"/></a:spcAft>${bullet}</a:pPr>`);
     paragraphSizes.push(Math.max(...sourceRuns.map(run => fontSize(run.fontSize))));
     for (const [runIndex, run] of sourceRuns.entries()) {
       const lines = run.text.split(/\r\n?|\n/);

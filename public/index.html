@@ -6,6 +6,8 @@
     <title>SDLAB Slides · 발표 자료실</title>
     <link rel="stylesheet" href="/style.css" />
     <script defer src="/jszip.min.js"></script>
+    <script defer src="/text-model.js"></script>
+    <script defer src="/object-model.js"></script>
     <script defer src="/app.js"></script>
     <script defer src="/authoring-ui.js"></script>
   </head>
@@ -175,6 +177,10 @@
                 <button id="copyObjectsBtn" title="이 자료 안에서 복사 (Ctrl+C)" disabled>복사</button>
                 <button id="pasteObjectsBtn" title="현재 슬라이드에 붙여넣기 (Ctrl+V)" disabled>붙여넣기</button>
               </div>
+              <div class="object-state-actions">
+                <button id="groupObjectsBtn" title="사이트에서 추가한 개체를 그룹으로 묶기 (Ctrl+G)" disabled>그룹</button>
+                <button id="ungroupObjectsBtn" title="선택한 그룹 해제 (Ctrl+Shift+G)" disabled>그룹 해제</button>
+              </div>
               <details class="arrangement-tools" open>
                 <summary>정렬·분배</summary>
                 <p class="tool-help">선택한 개체 전체 범위에 맞춥니다.</p>
@@ -215,6 +221,33 @@
               <label id="textField"
                 >내용<textarea id="textValue" rows="5"></textarea></label
               ><button id="replaceImageBtn" hidden>이미지 교체</button>
+              <p id="originalImageNote" class="tool-help" hidden>원본 HTML 이미지는 복제한 뒤 자르기·맞춤을 편집할 수 있습니다.</p>
+              <p id="groupNote" class="tool-help" hidden>그룹은 비율을 유지해 크기를 조절합니다. 내부 개체를 편집하려면 그룹을 해제하세요.</p>
+              <section id="imageTools" class="object-visual-tools" aria-label="이미지 편집" hidden>
+                <h3>이미지</h3>
+                <label>프레임 맞춤<select id="imageModeValue"><option value="fill">채우기 (Fill)</option><option value="fit">맞춤 (Fit)</option><option value="stretch">늘이기</option></select></label>
+                <p class="tool-help">원본 가장자리에서 자를 비율입니다. 원본 파일은 보존됩니다.</p>
+                <div class="prop-grid">
+                  <label>왼쪽 자르기 %<input id="cropLeftValue" type="number" min="0" max="99" step="any" /></label>
+                  <label>오른쪽 자르기 %<input id="cropRightValue" type="number" min="0" max="99" step="any" /></label>
+                  <label>위쪽 자르기 %<input id="cropTopValue" type="number" min="0" max="99" step="any" /></label>
+                  <label>아래쪽 자르기 %<input id="cropBottomValue" type="number" min="0" max="99" step="any" /></label>
+                </div>
+                <button id="resetCropBtn">자르기 초기화</button>
+              </section>
+              <section id="shapeTools" class="object-visual-tools" aria-label="도형 편집" hidden>
+                <h3>도형</h3>
+                <label>종류<select id="shapeTypeValue"><option value="rect">사각형</option><option value="ellipse">원·타원</option><option value="line">선</option><option value="arrow">화살표</option></select></label>
+                <div class="prop-grid">
+                  <label>채우기 색<input id="shapeFillValue" type="color" /></label>
+                  <label>테두리 색<input id="shapeStrokeValue" type="color" /></label>
+                </div>
+                <label class="switch-row"><span>채우기 없음</span><input id="shapeNoFillValue" type="checkbox" /></label>
+                <div class="prop-grid">
+                  <label>테두리 두께 px<input id="shapeStrokeWidthValue" type="number" min="0" max="40" step="any" /></label>
+                  <label>테두리 선<select id="shapeDashValue"><option value="solid">실선</option><option value="dash">파선</option><option value="dot">점선</option></select></label>
+                </div>
+              </section>
               <p id="textUnavailableNote" class="tool-help" hidden>이미지나 다른 개체가 포함된 묶음은 내용과 글자 서식을 직접 바꿀 수 없습니다. 안쪽 텍스트 개체를 선택하세요.</p>
               <section id="textTools" class="text-tools" aria-label="텍스트 서식" hidden>
                 <div class="panel-heading"><h3>텍스트 서식</h3></div>
@@ -290,7 +323,7 @@
               </div>
               <label class="switch-row"><span>크기 비율 유지</span><input id="lockAspect" type="checkbox" /></label>
               <div class="prop-grid">
-                <label>배경 색<input id="fillValue" type="color" /></label>
+                <label id="fillField">배경 색<input id="fillValue" type="color" /></label>
               </div>
               <button id="removeElementBtn" class="danger-text">
                 선택한 요소 숨기기

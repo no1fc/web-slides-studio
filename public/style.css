@@ -829,6 +829,10 @@ dialog::backdrop {
   width: 760px;
 }
 .editor-toolbar { flex-wrap: wrap; }
+.object-visual-tools { border-top: 1px solid var(--border); margin-top: 16px; padding-top: 12px; }
+.object-visual-tools h3 { font-size: 13px; margin: 0 0 12px; }
+.shape-picker { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.shape-picker button { padding: 20px; font-size: 15px; }
 .authoring-dialog { width: min(1100px, 94vw); max-height: 92vh; }
 .authoring-field { display: block; margin: 16px 0; font-size: 13px; font-weight: 600; }
 .authoring-field input, .authoring-field textarea { display: block; width: 100%; margin-top: 8px; box-sizing: border-box; }

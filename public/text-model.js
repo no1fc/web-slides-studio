@@ -208,13 +208,14 @@
         }
         if (paragraph.lineHeight !== undefined) block.style.lineHeight = String(paragraph.lineHeight);
         if (paragraph.spaceAfter !== undefined) block.style.marginBottom = paragraph.spaceAfter + "px";
-        block.style.paddingLeft = (indent * 32 + (list === "none" ? 0 : 24)) + "px";
+        const metricsScale = Number(element.getAttribute("data-sd-text-metrics-scale")) || 1;
+        block.style.paddingLeft = ((indent * 32 + (list === "none" ? 0 : 24)) * metricsScale) + "px";
         if (list !== "none") {
           const marker = document.createElement("span");
           marker.setAttribute("data-sd-marker", "");
           marker.setAttribute("contenteditable", "false");
           marker.setAttribute("aria-hidden", "true");
-          marker.style.cssText = `position:absolute;left:${indent * 32}px;width:24px;user-select:none;text-align:left;`;
+          marker.style.cssText = `position:absolute;left:${indent * 32 * metricsScale}px;width:${24 * metricsScale}px;user-select:none;text-align:left;`;
           if (list === "number") {
             counters[indent] = (counters[indent] || 0) + 1;
             counters.length = indent + 1;

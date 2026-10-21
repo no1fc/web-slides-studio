@@ -107,7 +107,10 @@ export class Store {
         throw e;
       }
       const state = validateState(raw, meta);
-      for (const item of [...Object.values(state.patches), ...state.added]) {
+      const imageItems = [...Object.values(state.patches), ...state.added];
+      for (let i = 0; i < imageItems.length; i++) {
+        const item = imageItems[i];
+        if (item.group) imageItems.push(...item.group.children);
         if (!item.src) continue;
         try {
           if (!(await stat(this.path(id, "assets", item.src))).isFile())

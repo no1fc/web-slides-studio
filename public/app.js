@@ -276,7 +276,7 @@ async function structural(fn) {
   refreshFrame();
 }
 function patch(p) {
-  if (!selected || !activeElement(selected.id) || objectLocked(selected.id)) return;
+  if (!selected || !activeElement(selected.id) || objectLocked(selected.id) || objectBusy) return;
   checkpoint();
   state.patches[selected.id] = { ...(state.patches[selected.id] || {}), ...p };
   post("patch", { id: selected.id, patch: p });
@@ -325,10 +325,11 @@ function properties() {
   $("properties").querySelectorAll("input,textarea,button,select").forEach(control => { control.disabled = !s || objectLocked(s.id); });
   textProperties();
   arrangementTools();
+  visualProperties();
   if (!s) return;
   $("precisionNote").textContent = objectLocked(s.id) ? "잠긴 개체입니다. 레이어 목록에서 잠금을 해제하세요." : s.precisionReason || "";
   $("precisionNote").hidden = !$("precisionNote").textContent;
-  $("textField").hidden = s.tag === "img";
+  $("textField").hidden = s.tag === "img" || ["image", "shape", "group"].includes(s.kind);
   $("replaceImageBtn").hidden = s.tag !== "img";
   $("textValue").value = s.text;
   for (const [id, key] of [
@@ -340,6 +341,64 @@ function properties() {
     ["fillValue", "fill"],
   ])
     $(id).value = s[key] ?? 0;
+}
+function nativeAdded(id) {
+  return state?.added.find(a => a.id === id && a.slide === state.order[index] && ["text", "image", "shape", "group"].includes(a.kind));
+}
+function visualProperties() {
+  const s = selected, native = s && nativeAdded(s.id);
+  const image = native?.kind === "image", shape = native?.kind === "shape", group = native?.kind === "group";
+  $("imageTools").hidden = !image;
+  $("shapeTools").hidden = !shape;
+  $("groupNote").hidden = !group;
+  $("originalImageNote").hidden = !s || s.tag !== "img" || image;
+  $("fillField").hidden = !!(shape || group);
+  if (group) { $("lockAspect").checked = true; $("lockAspect").disabled = true; }
+  if (shape || group) $("textUnavailableNote").hidden = true;
+  const disabled = !s || objectLocked(s.id) || objectBusy || !frameReady;
+  for (const panel of ["imageTools", "shapeTools"])
+    $(panel).querySelectorAll("input,select,button").forEach(control => { control.disabled = disabled; });
+  if (image) {
+    const value = globalThis.SDObjects.normalizeImage(state.patches[s.id]?.image || s.image || native.image);
+    $("imageModeValue").value = value.mode;
+    for (const side of ["Left", "Right", "Top", "Bottom"])
+      $("crop" + side + "Value").value = Math.round(value.crop[side.toLowerCase()] * 100000) / 1000;
+  }
+  if (shape) {
+    const value = globalThis.SDObjects.normalizeShape(state.patches[s.id]?.shape || s.shape || native.shape, state.patches[s.id]?.fill || native.fill);
+    for (const [id, key] of [["shapeTypeValue", "type"], ["shapeStrokeValue", "stroke"], ["shapeStrokeWidthValue", "strokeWidth"], ["shapeDashValue", "dash"]]) $(id).value = value[key];
+    $("shapeFillValue").value = value.fill === "none" ? "#087e77" : value.fill;
+    $("shapeNoFillValue").checked = value.fill === "none";
+    const line = ["line", "arrow"].includes(value.type);
+    $("shapeFillValue").disabled = disabled || line || value.fill === "none";
+    $("shapeNoFillValue").disabled = disabled || line;
+  }
+}
+function visualPatch(kind, changes) {
+  const s = selected, object = s && nativeAdded(s.id);
+  if (!object || object.kind !== kind || objectLocked(s.id) || objectBusy || !frameReady) return;
+  const context = objectContext(), id = s.id;
+  let value;
+  try {
+    const current = state.patches[id]?.[kind] || s[kind] || object[kind];
+    value = kind === "image"
+      ? globalThis.SDObjects.normalizeImage({ ...globalThis.SDObjects.normalizeImage(current), ...changes })
+      : globalThis.SDObjects.normalizeShape({ ...globalThis.SDObjects.normalizeShape(current, state.patches[id]?.fill || object.fill), ...changes });
+  } catch (error) { toast(error.message); visualProperties(); return; }
+  const previousStatus = $("saveStatus").textContent, processingStatus = "개체 적용 중…";
+  $("saveStatus").textContent = processingStatus;
+  return queueObjectWork(context, async () => {
+    if (selected?.id !== id || objectLocked(id)) return;
+    const candidate = clone(state), p = { [kind]: value };
+    candidate.patches[id] = { ...(candidate.patches[id] || {}), ...p };
+    const validated = await validateObjectState(candidate, context);
+    if (!validated || selected?.id !== id || objectLocked(id)) return;
+    checkpoint(); state = validated;
+    Object.assign(selected, p); post("patch", { id, patch: p }); mark();
+  }).finally(() => {
+    properties();
+    if ($("saveStatus").textContent === processingStatus) $("saveStatus").textContent = previousStatus;
+  });
 }
 function editableText(allowBusy = false) {
   return !!selected && selectedElements.length === 1 && selected.textEditable === true &&
@@ -408,6 +467,7 @@ function objectLocked(id) {
 }
 const arrangementCommands = {
   duplicateObjectsBtn: "duplicate", copyObjectsBtn: "copy",
+  groupObjectsBtn: "group", ungroupObjectsBtn: "ungroup",
   alignLeftBtn: "align-left", alignCenterBtn: "align-center", alignRightBtn: "align-right",
   alignTopBtn: "align-top", alignMiddleBtn: "align-middle", alignBottomBtn: "align-bottom",
   distributeXBtn: "distribute-x", distributeYBtn: "distribute-y",
@@ -425,6 +485,8 @@ function arrangementTools() {
     const enabled = name.startsWith("align-") ? precise && count >= 2
       : name.startsWith("distribute-") ? precise && count >= 3
       : ["front", "forward", "backward", "back"].includes(name) ? layerable
+      : name === "group" ? precise && count >= 2 && layerable && selectedElements.every(item => nativeAdded(item.id) && item.groupable !== false)
+      : name === "ungroup" ? precise && count === 1 && nativeAdded(selected?.id)?.kind === "group"
       : editable;
     $(id).disabled = unavailable || !enabled;
   }
@@ -565,6 +627,46 @@ function receiveObjects(operation, objects, context = objectContext()) {
     refreshFrame(ids);
   });
 }
+function receiveStructure(operation, removeIds, objects) {
+  if (!["group", "ungroup"].includes(operation) || !Array.isArray(removeIds) || !Array.isArray(objects) || !removeIds.length || new Set(removeIds).size !== removeIds.length) return;
+  const matchesSelection = () => removeIds.length === selectedElements.length && removeIds.every(id => selectedElements.some(s => s.id === id) && nativeAdded(id) && !objectLocked(id));
+  if (!matchesSelection()) return;
+  if (operation === "group" && (removeIds.length < 2 || objects.length !== 1 || objects[0]?.kind !== "group" || objects[0]?.group?.children?.length !== removeIds.length)) return;
+  if (operation === "ungroup" && (removeIds.length !== 1 || nativeAdded(removeIds[0])?.kind !== "group" || objects.length !== nativeAdded(removeIds[0]).group.children.length)) return;
+  const context = objectContext(), previousStatus = $("saveStatus").textContent, processingStatus = "개체 적용 중…";
+  $("saveStatus").textContent = processingStatus;
+  return queueObjectWork(context, async () => {
+    if (!matchesSelection()) return;
+    const sourceLayers = layerItems.filter(item => removeIds.includes(item.id));
+    if (sourceLayers.length !== removeIds.length || new Set(sourceLayers.map(item => item.group)).size !== 1 || sourceLayers.some(item => item.hidden || !item.layerable)) return;
+    const candidate = clone(state), ids = [], replacements = [];
+    const orderedObjects = operation === "ungroup" ? [...objects].sort((a, b) => (a.z ?? 20) - (b.z ?? 20)) : objects;
+    for (const snapshot of orderedObjects) {
+      if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot) || !["text", "image", "shape", "group"].includes(snapshot.kind)) throw new Error("그룹 개체 정보를 확인해 주세요.");
+      const object = { ...clone(snapshot), id: uid("a"), slide: context.slide };
+      ids.push(object.id); replacements.push(object);
+    }
+    candidate.added = candidate.added.filter(a => !removeIds.includes(a.id));
+    for (const id of removeIds) delete candidate.patches[id];
+    candidate.added.push(...replacements);
+    // Keep the group's position at its highest source; expand children in place.
+    const siblings = layerItems.filter(item => item.group === sourceLayers[0].group).sort((a, b) => a.z - b.z);
+    const anchor = siblings.findLast(item => removeIds.includes(item.id)).id;
+    const order = siblings.flatMap(item => item.id === anchor ? replacements : removeIds.includes(item.id) ? [] : [item]);
+    order.forEach((item, position) => {
+      const z = position + 1;
+      if (ids.includes(item.id)) item.z = z;
+      else candidate.patches[item.id] = { ...(candidate.patches[item.id] || {}), z, ...(item.position === "static" ? { layerPosition: "relative" } : {}) };
+    });
+    const validated = await validateObjectState(candidate, context);
+    if (!validated || !matchesSelection()) return;
+    checkpoint(); state = validated; mark(); await flush();
+    if (currentObjectContext(context)) { renderSlides(); refreshFrame(ids); }
+  }).finally(() => {
+    properties();
+    if ($("saveStatus").textContent === processingStatus) $("saveStatus").textContent = previousStatus;
+  });
+}
 function pasteObjects() {
   if (!objectClipboard || objectClipboard.deckId !== deck?.id) return;
   return receiveObjects("paste", clone(objectClipboard.objects));
@@ -623,7 +725,7 @@ window.addEventListener("message", (e) => {
     return;
   const d = e.data;
   if (d.editorSession && d.editorSession !== editorSession) return;
-  if (["select", "change", "batch-change", "layers", "objects", "paste"].includes(d.type) &&
+  if (["select", "change", "batch-change", "layers", "objects", "object-structure", "paste"].includes(d.type) &&
     d.slide !== undefined && d.slide !== state.order[index]) return;
   if (d.type === "pan" && Number.isFinite(d.dx) && Number.isFinite(d.dy)) {
     $("canvasViewport").scrollBy(d.dx, d.dy);
@@ -662,6 +764,7 @@ window.addEventListener("message", (e) => {
     renderLayers();
   }
   if (d.type === "objects" && frameReady && d.slide === state.order[index]) receiveObjects(d.operation, d.objects);
+  if (d.type === "object-structure" && frameReady && d.slide === state.order[index]) receiveStructure(d.operation, d.removeIds, d.objects);
   if (d.type === "paste" && frameReady) action(pasteObjects)();
   if (d.type === "notice" && typeof d.message === "string") toast(d.message);
   if (d.type === "navigate" && Number.isInteger(d.index)) {
@@ -913,11 +1016,13 @@ for (const [id, key] of [
     const v = Number($(id).value);
     if ($(id).checkValidity() && $(id).value !== "") {
       const change = { [key]: v };
-      if (selected && $("lockAspect").checked && ["w", "h"].includes(key)) {
+      if (selected && ($("lockAspect").checked || nativeAdded(selected.id)?.kind === "group") && ["w", "h"].includes(key)) {
         const other = key === "w" ? "h" : "w";
         const extra = key === "w" ? selected.extraW || 0 : selected.extraH || 0;
         const otherExtra = key === "w" ? selected.extraH || 0 : selected.extraW || 0;
         change[other] = Math.round(((selected[other] + otherExtra) * (v + extra) / (selected[key] + extra) - otherExtra) * 100) / 100;
+        const group = nativeAdded(selected.id)?.group;
+        if (group) change[other] = v * group[other === "w" ? "width" : "height"] / group[key === "w" ? "width" : "height"];
         if (change[other] < 1 || change[other] > 5000) { toast("비율을 유지한 크기는 1~5000 범위여야 합니다."); properties(); return; }
       }
       patch(change);
@@ -952,6 +1057,22 @@ for (const [id, delta] of [["outdentTextBtn", -1], ["indentTextBtn", 1]])
     textFormat("paragraph", { indent: Math.max(0, Math.min(8, (selected?.textStyle?.indent ?? 0) + delta)) });
   };
 $("fillValue").onchange = () => patch({ fill: $("fillValue").value });
+$("imageModeValue").onchange = () => visualPatch("image", { mode: $("imageModeValue").value });
+for (const side of ["Left", "Right", "Top", "Bottom"]) $("crop" + side + "Value").onchange = () => {
+  const control = $("crop" + side + "Value");
+  if (control.value === "" || !control.checkValidity()) { toast("자르기는 0~99% 범위로 입력해 주세요."); visualProperties(); return; }
+  const current = globalThis.SDObjects.normalizeImage(state.patches[selected?.id]?.image || selected?.image);
+  visualPatch("image", { crop: { ...current.crop, [side.toLowerCase()]: Number(control.value) / 100 } });
+};
+$("resetCropBtn").onclick = () => visualPatch("image", { crop: { left: 0, right: 0, top: 0, bottom: 0 } });
+for (const [id, key] of [["shapeTypeValue", "type"], ["shapeFillValue", "fill"], ["shapeStrokeValue", "stroke"], ["shapeDashValue", "dash"]])
+  $(id).onchange = () => visualPatch("shape", { [key]: $(id).value });
+$("shapeStrokeWidthValue").onchange = () => {
+  const control = $("shapeStrokeWidthValue");
+  if (control.value === "" || !control.checkValidity()) { toast("테두리는 0~40px 범위로 입력해 주세요."); visualProperties(); return; }
+  visualPatch("shape", { strokeWidth: Number(control.value) });
+};
+$("shapeNoFillValue").onchange = () => visualPatch("shape", { fill: $("shapeNoFillValue").checked ? "none" : $("shapeFillValue").value });
 $("removeElementBtn").onclick = () => patch({ hidden: true });
 $("undoBtn").onclick = () => performHistory(true);
 $("redoBtn").onclick = () => performHistory(false);
@@ -1020,20 +1141,20 @@ $("addTextBtn").onclick = action(() =>
     }),
   ),
 );
-$("addShapeBtn").onclick = action(() =>
-  structural(() =>
-    state.added.push({
-      id: uid("a"),
-      slide: state.order[index],
-      kind: "shape",
-      x: 150,
-      y: 300,
-      w: 420,
-      h: 200,
-      fill: "#087e77",
-    }),
-  ),
-);
+$("addShapeBtn").onclick = action(() => {
+  const body = dialog("도형 추가"), choices = el("div", undefined, "shape-picker");
+  for (const [type, label] of [["rect", "□ 사각형"], ["ellipse", "○ 원·타원"], ["line", "╱ 선"], ["arrow", "↗ 화살표"]]) {
+    const button = el("button", label);
+    button.dataset.shapeType = type;
+    button.onclick = transitionAction(async () => {
+      $("dialog").close();
+      await structural(() => state.added.push({ id: uid("a"), slide: state.order[index], kind: "shape", x: 150, y: 300, w: 420, h: 200,
+        shape: { type, fill: ["line", "arrow"].includes(type) ? "none" : "#087e77", stroke: "#087e77", strokeWidth: 3, dash: "solid" } }));
+    }, "도형 추가 중…");
+    choices.append(button);
+  }
+  body.append(choices);
+});
 $("addImageBtn").onclick = () => {
   replaceImage = false;
   $("imageInput").click();
@@ -1052,7 +1173,7 @@ $("imageInput").onchange = action(async (e) => {
   );
   const b = await r.json();
   if (!r.ok) throw new Error(b.error);
-  if (replaceImage && selected) patch({ src: b.src });
+  if (replaceImage && selected) patch({ src: b.src, ...(nativeAdded(selected.id)?.kind === "image" ? { image: globalThis.SDObjects.normalizeImage({ mode: selected.image?.mode || "fit" }) } : {}) });
   else
     await structural(() =>
       state.added.push({
@@ -1060,6 +1181,7 @@ $("imageInput").onchange = action(async (e) => {
         slide: state.order[index],
         kind: "image",
         src: b.src,
+        image: globalThis.SDObjects.normalizeImage({ mode: "fit" }),
         x: 150,
         y: 200,
         w: 640,

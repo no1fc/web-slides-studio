@@ -137,13 +137,41 @@ richText 하나는 최대 500문단·5,000 run·100,000 UTF-16 단위의 문자(
 
 콘텐츠 서버는 자료 ID와 임의 토큰을 확인합니다. 비공개 미리보기와 공개 게시용 토큰을 구분합니다. 휴지통 자료와 철회된 링크는 읽을 수 없습니다. iframe·CSP·postMessage 출처 검사를 통해 관리 기능을 분리합니다.
 
-출력기는 서버 내부 loopback 콘텐츠 URL을 읽습니다. 외부 HTTP 통신을 차단한 컨테이너에서도 동작하며, HTML/PDF/PPTX는 요청 당시의 저장 상태를 사용합니다. 콘텐츠 서버는 `/_studio/text-model.js` → `/_studio/text-editor.js` → `/_studio/bridge.js` 순서로 classic script를 넣습니다. 출력기의 요청 허용 목록에는 해당 세 경로와 자료 자산의 GET만 포함합니다. HTML ZIP에는 같은 순서로 `assets/studio-text-model.js`, `assets/studio-text-editor.js`, `assets/studio-viewer.js`를 포함합니다.
+출력기는 서버 내부 loopback 콘텐츠 URL을 읽습니다. 외부 HTTP 통신을 차단한 컨테이너에서도 동작하며, HTML/PDF/PPTX는 요청 당시의 저장 상태를 사용합니다. 콘텐츠 서버는 `/_studio/text-model.js` → `/_studio/text-editor.js` → `/_studio/object-model.js` → `/_studio/bridge.js` 순서로 classic script를 넣습니다. 출력기의 요청 허용 목록에는 해당 네 경로와 자료 자산의 GET만 포함합니다. HTML ZIP에는 `assets/studio-object-model.js`, `assets/studio-text-model.js`, `assets/studio-text-editor.js`, `assets/studio-viewer.js`를 포함합니다.
 
 PDF와 외형 보존 PPTX는 슬라이드 캡처이고, 편집 가능 PPTX는 지원 요소를 별도로 추출합니다. `collect()`의 텍스트에는 기존 좌표 외에 richText·textBox·표시 fontScale·padding·textOverflowing이 들어갑니다. 저장한 문단·run 구조를 유지하면서 생략된 서식은 실제 DOM의 computed style로 보완해 출력합니다. PPTX는 표시 배율을 반영한 문자 크기·문단 뒤 간격·들여쓰기·목록 여백과 원래 상자·회전을 사용하며 PowerPoint의 추가 자동 축소를 걸지 않습니다. 1920×1080 문서를 13⅓×7.5인치 슬라이드로 옮기므로 CSS px는 0.5pt에 대응합니다.
 
 `src/text-export.js`는 글꼴·크기·색·굵게·기울임·밑줄을 run으로, 정렬·줄간격·간격·들여쓰기·목록을 문단 속성으로 기록합니다. PptxGenJS 4.0.1의 중복 문단 속성 및 일반 문단 들여쓰기 문제를 생성한 native 텍스트 상자에 한정한 XML 보정으로 처리합니다. 문단 내부 개행은 soft break로 남기고 글꼴 이름을 XML 속성으로 escape합니다.
 
 `overflow: clip`이고 실제로 넘치는 텍스트는 화면에 보이는 자르기를 보존하기 위해 배경 이미지로 남깁니다. 지원하지 않는 복합 HTML·CSS 장식·3D도 이미지에 포함됩니다. 자동 검증은 PPTX XML 모델 보존을 확인하며 실제 PowerPoint의 글꼴 대체·줄바꿈·렌더링 동등성을 보장하지 않습니다. Linux Chromium과 설치 글꼴의 결과는 배포 환경에서 별도로 확인합니다.
+
+## 이미지·도형·그룹 모델
+
+`public/object-model.js`의 `SDObjects`를 서버 검증/렌더링, 편집 iframe, 관리자 UI, 출력기가 공유한다. schemaVersion 1을 유지하며 추가 이미지에는 `image`, 도형에는 `shape`, `kind:"group"`에는 `group`을 사용한다. 기존 사각형의 `fill`과 이전 이미지는 기본값으로 호환한다.
+
+이전 사각형에 text/richText/textBox를 입력한 자료는 읽을 때 배경색을 가진 text 개체로 변환한다. 원본 revision은 다시 쓰지 않는다. 글자 크기가 없던 이전 도형은 `inheritFontSize:true`로 원본 CSS의 크기 상속을 유지하며, 독립 복제/그룹화할 때는 측정한 글자 크기로 확정한다. 명시적인 새 shape 모델에 텍스트를 섞으면 표시 손실 대신 검증 오류를 반환한다.
+
+```json
+{
+  "id": "a-example", "slide": "s0", "kind": "image",
+  "src": "assets/example.png", "x": 100, "y": 200, "w": 640, "h": 360,
+  "image": {"mode": "fit", "crop": {"left": 0.1, "top": 0, "right": 0.2, "bottom": 0}}
+}
+```
+
+`src`는 자료 안의 실제 파일이어야 하며 절대/상위 경로, URL, 인코딩된 경로 탈출은 거부한다. crop은 원본 기준 비율로 저장하며 대향 합은 0.99 이하다. `imageLayout`이 원본 이미지 크기와 프레임 크기로 실제 표시 위치와 유효 crop을 계산한다. 프레임 DIV와 내부 overflow window/IMG는 표준 CSS로 렌더링하며 원본을 다시 인코딩하지 않는다.
+
+도형 예시는 `shape:{type:"ellipse",fill:"#087e77",stroke:"#123456",strokeWidth:3,dash:"solid"}`이다. type은 rect/ellipse/line/arrow, fill은 6자리 색 또는 none, dash는 solid/dash/dot이다. 입력 SVG를 실행하지 않고 검증한 값으로 SVG를 생성한다.
+
+그룹 예시는 `kind:"group",x:100,y:100,w:600,h:300,group:{width:600,height:300,children:[...]}`이다. children은 id/slide가 없는 text/image/shape/group 스냅샷이며 내부 좌표계를 쓴다. 최상위 그룹에만 data-sd-id가 있다. 재귀 깊이 4, 재귀 총 개체 500, 편집 상태 2MB를 적용한다. 그룹 바깥 크기는 내부 크기에 대해 균일 배율이어야 한다. 해제는 중심 회전과 배율을 자식에 적용하고 전체 후보 상태를 검증한 뒤 한 번에 저장한다. 글자 크기·문단 간격·테두리를 확대하고 native text의 `textMetricsScale`로 고정 목록/들여쓰기 간격을 유지한다. 범위를 넘으면 clamp하지 않고 전체 명령을 거부한다.
+
+부모는 `object-structure` 메시지의 현재 자료/슬라이드/session, 정확한 선택 ID, 잠금, native 종류를 확인한다. 원본 제거·자식 추가·patch 정리·같은 부모의 z 순서 변경을 하나의 history 항목으로 기록한다. 그룹은 가장 앞에 있는 선택 개체의 위치에 삽입하고 해제한 자식은 그룹의 현재 위치에 연속 배치한다. 복잡한 HTML의 CSS stacking context는 이 모델에 흡수하지 않는다.
+
+콘텐츠와 HTML ZIP에는 bridge.js보다 앞에 object-model.js를 추가한다. 관리자에도 text-model.js와 object-model.js를 제공한다. 이미지 load·프레임 크기 변경 시 표시를 갱신하며 그룹 크기 변경은 내부 좌표계에 균일 CSS scale을 적용한다.
+
+`src/object-export.js`는 원본 이미지 바이트와 PPTX srcRect, 네이티브 도형을 생성한다. WebP는 자르지 않은 전체 원본을 PNG로 변환한다. 그룹은 변환한 자식을 독립 editable 개체로 출력하고 지원 불가 자식이 하나라도 있으면 그룹 전체를 배경에 남긴다. 원본 경로는 자료 root의 realpath 안인지 확인한 후 읽는다. 현재 혼합 배경/네이티브 요소의 모든 겹침 및 PowerPoint 그룹 계층 복원은 6단계 호환성 과제다.
+
+수집한 상위 개체가 배경으로 남으면 그 영역과 겹치는 하위 개체도 배경으로 돌려 겹침 순서를 보존한다. 이 판단은 뒤에서 앞으로 전파하고 회전 경계·그룹 밖 자식도 포함한다. 범위 밖으로 표시되는 텍스트가 있으면 보수적으로 슬라이드 전체를 사용한다. 이때 편집 가능한 출력 개체 수가 줄어들 수 있다. 수집 범위 밖 임의 HTML/CSS 장식의 전체 겹침은 별도 호환성 범위다.
 
 ## 파일 삭제의 보호 범위
 

@@ -6,7 +6,8 @@ import { PDFDocument } from "pdf-lib";
 import pptxgen from "pptxgenjs";
 import { renderDeck } from "./deck.js";
 import { collectFiles } from "./files.js";
-import { canExportNativeText, pptxText, finalizeTextPptx } from "./text-export.js";
+import { finalizeTextPptx } from "./text-export.js";
+import { prepareNativeObjects, addNativeObjects, finalizeObjectPptx } from "./object-export.js";
 const publicDir = new URL("../public/", import.meta.url);
 export async function exportDeck({ store, deck, format, url, contentOrigin }) {
   const root = store.path(deck.id, "assets");
@@ -31,10 +32,10 @@ export async function exportDeck({ store, deck, format, url, contentOrigin }) {
       .replace(/<head([^>]*)>/i, "<head$1>" + bootstrap)
       .replace(
         /<\/body>/i,
-        `<script id="sd-config" type="application/json">${config}</script><script src="assets/studio-text-model.js"></script><script src="assets/studio-text-editor.js"></script><script src="assets/studio-viewer.js"></script></body>`,
+        `<script id="sd-config" type="application/json">${config}</script><script src="assets/studio-object-model.js"></script><script src="assets/studio-text-model.js"></script><script src="assets/studio-text-editor.js"></script><script src="assets/studio-viewer.js"></script></body>`,
       );
     zip.file("index.html", html);
-    for (const [source, target] of [["text-model.js", "studio-text-model.js"], ["text-editor.js", "studio-text-editor.js"], ["bridge.js", "studio-viewer.js"]]) {
+    for (const [source, target] of [["object-model.js", "studio-object-model.js"], ["text-model.js", "studio-text-model.js"], ["text-editor.js", "studio-text-editor.js"], ["bridge.js", "studio-viewer.js"]]) {
       zip.file("assets/" + target, await readFile(new URL(source, publicDir)));
     }
     zip.file(
@@ -77,7 +78,7 @@ export async function exportDeck({ store, deck, format, url, contentOrigin }) {
       const allowed =
         u.origin === contentOrigin &&
         (u.pathname.startsWith(prefix) ||
-          ["/_studio/bridge.js", "/_studio/text-model.js", "/_studio/text-editor.js"].includes(u.pathname)) &&
+          ["/_studio/bridge.js", "/_studio/object-model.js", "/_studio/text-model.js", "/_studio/text-editor.js"].includes(u.pathname)) &&
         route.request().method() === "GET";
       return allowed ? route.continue() : route.abort("blockedbyclient");
     });
@@ -100,9 +101,14 @@ export async function exportDeck({ store, deck, format, url, contentOrigin }) {
       ppt.lang = "ko-KR";
     }
     const nativeTextSlides = [];
+    const nativePictureSlides = [];
     for (let i = 0; i < count; i++) {
       await page.evaluate((n) => window.__sd.go(n), i);
       await page.waitForTimeout(1000);
+      await page.evaluate(async () => {
+        await Promise.all([...document.images].map(image => image.decode().catch(() => {})));
+        window.SDObjects?.refresh(document);
+      });
       if (pdf) {
         const bytes = await page.screenshot({ type: "jpeg", quality: 94 });
         const img = await pdf.embedJpg(bytes);
@@ -114,35 +120,24 @@ export async function exportDeck({ store, deck, format, url, contentOrigin }) {
       const slide = ppt.addSlide();
       const nativeTextShapes = [];
       nativeTextSlides.push(nativeTextShapes);
-      let native = [];
-      const nativeImages = new Map();
+      const nativePictures = [];
+      nativePictureSlides.push(nativePictures);
+      let prepared = { entries: [], hideIds: [] };
       if (format === "pptx-editable") {
-        native = await page.evaluate(() => window.__sd.collect());
-        native = native.filter(
-          (e) =>
-            e.x >= 0 &&
-            e.y >= 0 &&
-            e.x + e.w <= 1922 &&
-            e.y + e.h <= 1082 &&
-            e.w > 0 &&
-            e.h > 0 &&
-            (e.kind !== "text" || canExportNativeText(e)),
-        );
-        for (const e of native.filter((e) => e.kind === "image")) {
-          try {
-            nativeImages.set(
-              e.id,
-              await page
-                .locator(`[data-sd-id="${e.id}"]`)
-                .screenshot({ type: "png", timeout: 4000 }),
-            );
-          } catch {
-            native = native.filter((n) => n.id !== e.id);
-          }
-        }
+        prepared = await prepareNativeObjects(await page.evaluate(() => window.__sd.collect()), {
+          root, url, contentOrigin,
+          captureLegacyImage: e => page.locator(`[data-sd-id="${e.id}"]`).screenshot({ type: "png", timeout: 4000 }),
+          convertSourceImage: source => page.evaluate(async src => {
+            const image = new Image(); image.src = src; await image.decode();
+            const canvas = document.createElement("canvas");
+            canvas.width = image.naturalWidth; canvas.height = image.naturalHeight;
+            canvas.getContext("2d").drawImage(image, 0, 0);
+            return canvas.toDataURL("image/png");
+          }, source),
+        });
         await page.evaluate(
           (ids) => window.__sd.hideNative(ids),
-          native.map((e) => e.id),
+          prepared.hideIds,
         );
       }
       const background = await page.screenshot({ type: "jpeg", quality: 94 });
@@ -153,20 +148,7 @@ export async function exportDeck({ store, deck, format, url, contentOrigin }) {
         w: 13.333333,
         h: 7.5,
       });
-      for (const e of native) {
-        const box = { x: e.x / 144, y: e.y / 144, w: e.w / 144, h: e.h / 144 };
-        if (e.kind === "image") {
-          slide.addImage({
-            data:
-              "image/png;base64," + nativeImages.get(e.id).toString("base64"),
-            ...box,
-          });
-        } else {
-          const mapped = pptxText(e, `sd-native-text-${nativeTextShapes.length}`);
-          slide.addText(mapped.runs, mapped.options);
-          nativeTextShapes.push(mapped);
-        }
-      }
+      addNativeObjects(slide, prepared.entries, nativeTextShapes, nativePictures);
       slide.addNotes(
         `SDLAB Slides · 저장 버전 ${deck.revision} · ${i + 1}/${count}\n웹의 3D 배경은 정지 화면입니다. 편집 모드는 글꼴 및 줄바꿈 차이가 있을 수 있습니다.`,
       );
@@ -180,7 +162,7 @@ export async function exportDeck({ store, deck, format, url, contentOrigin }) {
         extension: "pdf",
       };
     return {
-      buffer: await finalizeTextPptx(await ppt.write({ outputType: "nodebuffer" }), nativeTextSlides),
+      buffer: await finalizeObjectPptx(await finalizeTextPptx(await ppt.write({ outputType: "nodebuffer" }), nativeTextSlides), nativePictureSlides),
       mime: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
       extension: "pptx",
     };

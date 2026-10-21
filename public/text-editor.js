@@ -9,7 +9,7 @@
     return rgb?.length >= 3 ? "#" + rgb.slice(0, 3).map(n => Math.round(Number(n)).toString(16).padStart(2, "0")).join("") : "#000000";
   };
   function eligible(el) {
-    return !!el && !["IMG", "SVG", "CANVAS", "VIDEO", "IFRAME", "INPUT", "TEXTAREA", "BUTTON", "SELECT"].includes(el.tagName) &&
+    return !!el && !["group", "image", "shape"].includes(el.dataset.sdKind) && !["IMG", "SVG", "CANVAS", "VIDEO", "IFRAME", "INPUT", "TEXTAREA", "BUTTON", "SELECT"].includes(el.tagName) &&
       !el.querySelector("[data-sd-id],img,svg,canvas,video,audio,iframe,input,textarea,button,select,table,script,style");
   }
   function runStyle(node, scale = 1, root = node) {
@@ -172,6 +172,7 @@
     if (!content || el.isContentEditable) return;
     const pNodes = [...content.children].filter(n => n.hasAttribute("data-sd-paragraph"));
     const rootStyle = getComputedStyle(el), rootSize = parseFloat(rootStyle.fontSize) || 16;
+    const metricsScale = Number(el.dataset.sdTextMetricsScale) || 1;
     const width = el.clientWidth - (parseFloat(rootStyle.paddingLeft) || 0) - (parseFloat(rootStyle.paddingRight) || 0);
     const height = el.clientHeight - (parseFloat(rootStyle.paddingTop) || 0) - (parseFloat(rootStyle.paddingBottom) || 0);
     const setScale = scale => {
@@ -181,10 +182,10 @@
         const firstSize = p.runs[0]?.fontSize || rootSize;
         node.style.fontSize = firstSize * scale + "px";
         node.style.marginBottom = (p.spaceAfter || 0) * scale + "px";
-        node.style.paddingLeft = ((p.indent || 0) * 32 + (p.list && p.list !== "none" ? 24 : 0)) * scale + "px";
+        node.style.paddingLeft = ((p.indent || 0) * 32 + (p.list && p.list !== "none" ? 24 : 0)) * metricsScale * scale + "px";
         [...node.querySelectorAll("[data-sd-run]")].forEach((run, j) => { run.style.fontSize = (p.runs[j]?.fontSize || rootSize) * scale + "px"; });
         const marker = node.querySelector("[data-sd-marker]");
-        if (marker) { marker.style.left = (p.indent || 0) * 32 * scale + "px"; marker.style.width = 24 * scale + "px"; }
+        if (marker) { marker.style.left = (p.indent || 0) * 32 * metricsScale * scale + "px"; marker.style.width = 24 * metricsScale * scale + "px"; }
       });
     };
     const overflows = () => content.scrollWidth > width + 1 || content.offsetHeight > height + 1;

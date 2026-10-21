@@ -16,7 +16,7 @@
   const patches = config.state?.patches || {};
   const added = new Map((config.state?.added || []).map((a) => [a.id, a]));
   const effective = (id) => ({ ...(added.get(id) || {}), ...(patches[id] || {}) });
-  const Text = globalThis.SDText, TextEditor = globalThis.SDTextEditor;
+  const Text = globalThis.SDText, TextEditor = globalThis.SDTextEditor, Objects = globalThis.SDObjects;
   const textRanges = new WeakMap();
   const pendingTextCommands = [];
   const displays = new Map();
@@ -126,6 +126,7 @@
         stage.style.transform = `scale(${innerWidth / 1920})`;
       }
     }
+    Objects.refresh(slides[current]);
     for (const el of slides[current]?.querySelectorAll('[data-sd-rich="true"]') || []) TextEditor.fit(el);
     tell("navigate", { index: current });
     report();
@@ -150,6 +151,11 @@
     return !effective(e.dataset.sdId).hidden && c.display !== "none" && c.visibility !== "hidden" && r.width > 0 && r.height > 0 && !e.closest(".notes");
   };
   const editableElements = () => [...(slides[current]?.querySelectorAll("[data-sd-id]") || [])];
+  const nativeKinds = new Set(["text", "image", "shape", "group"]);
+  const nativeAdded = e => nativeKinds.has(added.get(e.dataset.sdId)?.kind);
+  const groupable = e => nativeAdded(e) && !locked(e) && visible(e) && !geometry(e).reason && e.parentElement === slides[current];
+  const paintOrder = elements => elements.map((el, index) => ({ el, index, z: parseInt(getComputedStyle(el).zIndex) || 0 }))
+    .sort((a, b) => a.z - b.z || a.index - b.index).map(item => item.el);
   function bounds(elements) {
     const rects = elements.map(e => e.getBoundingClientRect());
     return { left: Math.min(...rects.map(r => r.left)), right: Math.max(...rects.map(r => r.right)), top: Math.min(...rects.map(r => r.top)), bottom: Math.max(...rects.map(r => r.bottom)) };
@@ -160,7 +166,7 @@
     if (!edit) return;
     tell("layers", { slide: slides[current]?.dataset.sdSlide, items: editableElements().map(e => {
       if (!groups.has(e.parentElement)) groups.set(e.parentElement, "g" + groupNumber++);
-      return { id: e.dataset.sdId, tag: e.tagName.toLowerCase(), label: (e.innerText || e.getAttribute("alt") || e.tagName).slice(0, 70), locked: locked(e), hidden: !visible(e), z: parseInt(getComputedStyle(e).zIndex) || 0, group: groups.get(e.parentElement), layerable: !geometry(e).reason, selected: selection.includes(e) };
+      return { id: e.dataset.sdId, tag: e.tagName.toLowerCase(), label: (e.innerText || e.getAttribute("alt") || e.dataset.sdKind || e.tagName).slice(0, 70), locked: locked(e), hidden: !visible(e), z: parseInt(getComputedStyle(e).zIndex) || 0, position: getComputedStyle(e).position, group: groups.get(e.parentElement), layerable: !geometry(e).reason, selected: selection.includes(e) };
     }) });
   }
   function elementInfo(e) {
@@ -177,9 +183,14 @@
     }
     return {
         id: e.dataset.sdId,
-        tag: e.tagName.toLowerCase(),
+        tag: p.kind === "image" ? "img" : e.tagName.toLowerCase(),
+        kind: p.kind || (e.tagName === "IMG" ? "image" : "html"),
+        groupable: groupable(e),
+        ...(p.kind === "image" ? { image: Objects.normalizeImage(p.image || {}) } : {}),
+        ...(p.kind === "shape" ? { shape: Objects.normalizeShape(p.shape || {}, p.fill) } : {}),
+        ...(p.kind === "group" ? { group: { width: p.group.width, height: p.group.height, count: p.group.children.length } } : {}),
         text: textInfo.textEditable ? Text.plainText(TextEditor.model(e)) : e.innerText || "",
-        src: e.getAttribute("src"),
+        src: p.src || e.getAttribute("src"),
         x: p.x ?? 0,
         y: p.y ?? 0,
         w: round(g.w),
@@ -253,6 +264,10 @@
       const rich = q.richText || TextEditor.model(e);
       TextEditor.render(e, rich, p.textBox);
     } else if ((p.w || p.h) && e.dataset.sdRich === "true") TextEditor.fit(e);
+    if (["image", "shape", "group"].includes(q.kind) && Object.keys(p).some(key => ["src", "image", "shape", "group", "w", "h", "fill"].includes(key))) {
+      Objects.applyVisual(e, q);
+      Objects.refresh(e);
+    }
   }
   function finishText() {
     if (!textEdit) return;
@@ -352,6 +367,10 @@
       if (d.before === undefined) delete patches[d.id];
       else patches[d.id] = d.before;
       d.el.style.cssText = d.cssText;
+      if (["image", "shape", "group"].includes(effective(d.id).kind)) {
+        Objects.applyVisual(d.el, effective(d.id));
+        Objects.refresh(d.el);
+      }
     }
     if (d.capture.hasPointerCapture(d.pointerId)) d.capture.releasePointerCapture(d.pointerId);
     report();
@@ -430,7 +449,7 @@
         const cos = Math.cos(radians), sin = Math.sin(radians);
         const localX = dx * cos + dy * sin, localY = -dx * sin + dy * cos, factor = e.altKey ? 2 : 1;
         let bw = g.bw + hx * localX * factor, bh = g.bh + hy * localY * factor;
-        if (lockAspect || e.shiftKey) {
+        if (lockAspect || e.shiftKey || effective(d.id).kind === "group") {
           let ratio = hx && hy ? (Math.abs(bw / g.bw - 1) >= Math.abs(bh / g.bh - 1) ? bw / g.bw : bh / g.bh) : hx ? bw / g.bw : bh / g.bh;
           ratio = clamp(ratio, Math.max((1 + g.extraW) / g.bw, (1 + g.extraH) / g.bh), Math.min((5000 + g.extraW) / g.bw, (5000 + g.extraH) / g.bh));
           bw = g.bw * ratio; bh = g.bh * ratio;
@@ -512,37 +531,65 @@
     if (changes.some(({ patch: p }) => Math.abs(p.x) > 5000 || Math.abs(p.y) > 5000)) throw new Error("정렬 결과가 편집 좌표 범위를 벗어납니다.");
     applyChanges(changes);
   }
-  function snapshotObject(source) {
+  function localAssetURL(raw) {
+    const base = new URL(".", location.href), url = new URL(raw, location.href);
+    if (url.origin !== base.origin || !url.pathname.startsWith(base.pathname) || url.search || url.hash)
+      throw new Error("외부 자산을 사용하는 개체는 복제할 수 없습니다.");
+    return decodeURIComponent(url.pathname.slice(base.pathname.length));
+  }
+  function objectBox(source) {
     const g = geometry(source), slide = slides[current].getBoundingClientRect(), ss = scale();
     if (g.reason) throw new Error("이 CSS 변환 개체는 복제할 수 없습니다. HTML/CSS 편집을 이용해 주세요.");
+    return { x: round((g.cx - slide.left) / ss - g.bw / 2), y: round((g.cy - slide.top) / ss - g.bh / 2), w: round(g.bw), h: round(g.bh), rotate: round(g.angle) };
+  }
+  function snapshotObject(source) {
+    const box = objectBox(source), p = effective(source.dataset.sdId);
+    if (nativeAdded(source)) {
+      const copy = structuredClone(p);
+      delete copy.id; delete copy.slide; delete copy.locked; delete copy.hidden; delete copy.layerPosition;
+      Object.assign(copy, box);
+      if (copy.kind === "text") {
+        copy.richText = TextEditor.resolve(source);
+        copy.textBox = TextEditor.box(source);
+        copy.text = Text.plainText(copy.richText);
+        copy.fontSize = parseFloat(getComputedStyle(source).fontSize);
+        delete copy.inheritFontSize;
+        copy.textMetricsScale = Number(source.dataset.sdTextMetricsScale) || 1;
+      }
+      if (copy.kind === "image") copy.image = Objects.normalizeImage(copy.image || {});
+      if (copy.kind === "shape") copy.shape = Objects.normalizeShape(copy.shape || {}, copy.fill);
+      return copy;
+    }
+    if (source.tagName === "IMG") {
+      const c = getComputedStyle(source);
+      // Decorated or off-center imported images retain the generic HTML snapshot.
+      // Plain imported images become independent native objects with their original source.
+      const simple = c.objectPosition === "50% 50%" && c.filter === "none" && c.clipPath === "none" && c.boxShadow === "none" &&
+        ["Top", "Right", "Bottom", "Left"].every(side => parseFloat(c[`border${side}Width`]) === 0) && parseFloat(c.borderRadius) === 0;
+      if (simple) return { kind: "image", src: Objects.safeImageSource(localAssetURL(source.src)), image: Objects.normalizeImage({ mode: { cover: "fill", contain: "fit", fill: "stretch" }[c.objectFit] || "stretch" }), ...box };
+    }
     const copy = source.cloneNode(true), originals = [source, ...source.querySelectorAll("*")], copies = [copy, ...copy.querySelectorAll("*")];
     const allowedTags = new Set("h1 h2 h3 h4 h5 h6 p div span section article header footer aside main ul ol li table thead tbody tfoot tr td th colgroup col caption img a br hr strong em b i u s small sub sup blockquote figcaption figure pre code".split(" "));
     const properties = "display box-sizing width height min-width min-height max-width max-height position top right bottom left padding-top padding-right padding-bottom padding-left margin-top margin-right margin-bottom margin-left color background-color background-image background-size background-position background-repeat border-top border-right border-bottom border-left border-radius font-family font-size font-weight font-style line-height letter-spacing word-spacing text-align text-decoration text-transform text-indent white-space word-break overflow-wrap vertical-align opacity box-shadow text-shadow object-fit object-position overflow flex flex-direction flex-wrap align-items justify-content gap grid-template-columns grid-template-rows transform transform-origin rotate scale translate".split(" ");
-    const base = new URL(".", location.href);
-    const localURL = raw => {
-      const url = new URL(raw, location.href);
-      if (url.origin !== base.origin || !url.pathname.startsWith(base.pathname) || url.search || url.hash) throw new Error("외부 자산을 사용하는 개체는 복제할 수 없습니다.");
-      return decodeURIComponent(url.pathname.slice(base.pathname.length));
-    };
     for (const [i, original] of originals.entries()) {
       const node = copies[i];
       if (!allowedTags.has(node.localName)) throw new Error(`복제할 수 없는 HTML 태그: ${node.localName}`);
       const attrs = [...node.attributes].filter(a => ["src", "alt", "colspan", "rowspan", "scope", "start"].includes(a.name));
       for (const attr of [...node.attributes]) node.removeAttribute(attr.name);
-      for (const attr of attrs) node.setAttribute(attr.name, attr.name === "src" ? localURL(attr.value) : attr.value);
+      for (const attr of attrs) node.setAttribute(attr.name, attr.name === "src" ? localAssetURL(attr.value) : attr.value);
       const computed = getComputedStyle(original);
       for (const property of properties) {
         let value = computed.getPropertyValue(property);
         // Preserve inherited text styles so editing the snapshot root still affects its text.
         if (i > 0 && ["font-family", "font-size", "color", "line-height", "letter-spacing", "word-spacing", "text-align"].includes(property) &&
           value === getComputedStyle(original.parentElement).getPropertyValue(property)) value = "inherit";
-        if (value.includes("url(")) value = value.replace(/url\(["']?([^"')]+)["']?\)/g, (_, url) => `url("${localURL(url)}")`);
+        if (value.includes("url(")) value = value.replace(/url\(["']?([^"')]+)["']?\)/g, (_, url) => `url("${localAssetURL(url)}")`);
         node.style.setProperty(property, value);
       }
     }
     Object.assign(copy.style, { position: "relative", left: "auto", right: "auto", top: "auto", bottom: "auto", margin: "0", width: "100%", height: "100%", minWidth: "0", minHeight: "0", maxWidth: "none", maxHeight: "none", boxSizing: "border-box", transform: "none", transformOrigin: "center center", translate: "none", rotate: "none", scale: "none" });
     const rich = source.dataset.sdRich === "true" ? TextEditor.resolve(source) : null;
-    return { kind: "html", html: copy.outerHTML, x: round((g.cx - slide.left) / ss - g.bw / 2), y: round((g.cy - slide.top) / ss - g.bh / 2), w: round(g.bw), h: round(g.bh), rotate: round(g.angle), ...(rich ? { richText: rich, textBox: TextEditor.box(source) } : {}) };
+    return { kind: "html", html: copy.outerHTML, ...box, ...(rich ? { richText: rich, textBox: TextEditor.box(source) } : {}) };
   }
   function command(name) {
     try {
@@ -551,13 +598,28 @@
       if (["front", "back", "forward", "backward"].includes(name)) { layerOrder(name); return; }
       if (["align-left", "align-center", "align-right", "align-top", "align-middle", "align-bottom", "distribute-x", "distribute-y"].includes(name)) { arrange(name); return; }
       if (selection.some(locked)) throw new Error("잠긴 개체는 먼저 레이어 목록에서 잠금을 해제해 주세요.");
+      if (name === "group") {
+        if (selection.length < 2 || selection.some(e => !groupable(e)))
+          throw new Error("같은 슬라이드에 추가한 글·이미지·도형·그룹을 두 개 이상 선택해 주세요. 원본 HTML 개체는 그룹으로 묶을 수 없습니다.");
+        const ordered = paintOrder(editableElements().filter(e => selection.includes(e)));
+        const grouped = Objects.groupObjects(ordered.map(snapshotObject));
+        grouped.z = Math.max(...ordered.map(e => parseInt(getComputedStyle(e).zIndex) || 0));
+        tell("object-structure", { operation: name, slide: slides[current].dataset.sdSlide, removeIds: ordered.map(e => e.dataset.sdId), objects: [grouped] });
+        return;
+      }
+      if (name === "ungroup") {
+        if (selection.length !== 1 || effective(selected.dataset.sdId).kind !== "group" || !groupable(selected))
+          throw new Error("잠기지 않은 그룹 하나를 선택해 주세요.");
+        tell("object-structure", { operation: name, slide: slides[current].dataset.sdSlide, removeIds: [selected.dataset.sdId], objects: Objects.ungroup(snapshotObject(selected)) });
+        return;
+      }
       if (["hide", "lock"].includes(name)) {
         const key = name === "hide" ? "hidden" : "locked";
         applyChanges(selection.map(e => ({ id: e.dataset.sdId, patch: { [key]: true } })));
         select(null);
       }
       if (["duplicate", "copy"].includes(name)) {
-        const objects = selection.map(snapshotObject);
+        const objects = paintOrder(editableElements().filter(e => selection.includes(e))).map(snapshotObject);
         tell("objects", { operation: name, slide: slides[current].dataset.sdSlide, objects });
       }
     } catch (error) { tell("notice", { message: error.message }); }
@@ -860,11 +922,65 @@
       select(null);
     }
   });
+  function nativeStyleSupported(element) {
+    const c = getComputedStyle(element);
+    return c.opacity === "1" && c.filter === "none" && c.clipPath === "none" && c.boxShadow === "none" &&
+      c.transform === "none" && c.scale === "none" &&
+      c.textShadow === "none" && c.backgroundImage === "none" && parseFloat(c.borderRadius) === 0 &&
+      ["Top", "Right", "Bottom", "Left"].every(side => parseFloat(c[`border${side}Width`]) === 0);
+  }
+  function collectNative(element, original, world, id, groupChild = false) {
+    const c = getComputedStyle(element), factor = world.w / (original.w || world.w);
+    const rgba = c.backgroundColor.match(/[\d.]+/g) || [];
+    const alpha = rgba.length > 3 ? Number(rgba[3]) : 1, fill = alpha === 0 ? "none" : hex(c.backgroundColor);
+    const base = { id, nativeObject: true, nativeSupported: nativeStyleSupported(element) && [0, 1].includes(alpha), groupChild,
+      kind: world.kind, x: world.x, y: world.y, w: world.w, h: world.h, rotate: world.rotate || 0, z: world.z ?? 20 };
+    if (world.kind === "group") {
+      if (fill !== "none") base.nativeSupported = false;
+      const children = [], content = element.querySelector(":scope > [data-sd-group-content]");
+      if (!content || content.children.length !== original.group.children.length) return { ...base, nativeSupported: false, children };
+      try {
+        const transformed = Objects.ungroup(world);
+        const nodes = [...content.children];
+        const order = original.group.children.map((object, index) => ({ object, index })).sort((a, b) => (a.object.z ?? 20) - (b.object.z ?? 20) || a.index - b.index);
+        for (const { object, index } of order) {
+          if (object.hidden || getComputedStyle(nodes[index]).display === "none") continue;
+          const child = collectNative(nodes[index], object, transformed[index], `${id}--${index}`, true);
+          if (!child.nativeSupported) base.nativeSupported = false;
+          children.push(...(child.kind === "group" ? child.children : [child]));
+        }
+      } catch { base.nativeSupported = false; }
+      return { ...base, children };
+    }
+    if (world.kind === "image") {
+      const source = element.querySelector("img[data-sd-image-source]");
+      return { ...base, nativeSupported: base.nativeSupported && !!source?.naturalWidth, src: source?.src,
+        naturalWidth: source?.naturalWidth, naturalHeight: source?.naturalHeight, image: Objects.normalizeImage(world.image || {}), fill };
+    }
+    if (world.kind === "shape") return { ...base, shape: Objects.normalizeShape(world.shape || {}, world.fill) };
+    if (world.kind !== "text" || !TextEditor.eligible(element)) return { ...base, nativeSupported: false };
+    try {
+      const richText = TextEditor.resolve(element);
+      for (const paragraph of richText.paragraphs) {
+        if (paragraph.spaceAfter !== undefined) paragraph.spaceAfter *= factor;
+        for (const run of paragraph.runs) if (run.fontSize !== undefined) run.fontSize *= factor;
+      }
+      return { ...base,
+        text: Text.plainText(richText), richText, textBox: TextEditor.box(element),
+        fontScale: Number(element.dataset.sdFontScale) || 1,
+        textMetricsScale: (Number(element.dataset.sdTextMetricsScale) || 1) * factor,
+        textOverflowing: element.dataset.sdTextOverflowing === "true",
+        fill,
+        padding: Object.fromEntries(["top", "right", "bottom", "left"].map(side => [side, (parseFloat(c["padding" + side[0].toUpperCase() + side.slice(1)]) || 0) * factor])),
+        fontSize: parseFloat(c.fontSize) * factor, fontFamily: c.fontFamily, color: hex(c.color).slice(1),
+        bold: parseInt(c.fontWeight) >= 600, align: ["center", "right"].includes(c.textAlign) ? c.textAlign : "left" };
+    } catch { return { ...base, nativeSupported: false }; }
+  }
   function collect() {
     const list = [];
     const slide = slides[current];
     const ss = scale();
-    for (const e of slide.querySelectorAll("[data-sd-id]")) {
+    for (const e of paintOrder([...slide.querySelectorAll("[data-sd-id]")])) {
       if (e.closest(".notes")) continue;
       const c = getComputedStyle(e),
         r = e.getBoundingClientRect();
@@ -875,6 +991,14 @@
         r.height < 1
       )
         continue;
+      if (nativeAdded(e)) {
+        try {
+          const { id, slide, layerPosition, ...original } = effective(e.dataset.sdId);
+          const world = { ...original, ...objectBox(e) };
+          list.push(collectNative(e, original, world, e.dataset.sdId));
+        } catch { /* Unsupported CSS stays in the screenshot background. */ }
+        continue;
+      }
       if (e.tagName === "IMG") {
         list.push({
           id: e.dataset.sdId,
@@ -893,7 +1017,7 @@
       if (TextEditor.eligible(e)) {
         try {
           const richText = TextEditor.resolve(e);
-          richInfo = { richText, textBox: TextEditor.box(e), fontScale: Number(e.dataset.sdFontScale) || 1, textOverflowing: e.dataset.sdTextOverflowing === "true", padding: Object.fromEntries(["top", "right", "bottom", "left"].map(side => [side, parseFloat(c["padding" + side[0].toUpperCase() + side.slice(1)]) || 0])) };
+          richInfo = { richText, textBox: TextEditor.box(e), textMetricsScale: Number(e.dataset.sdTextMetricsScale) || 1, fontScale: Number(e.dataset.sdFontScale) || 1, textOverflowing: e.dataset.sdTextOverflowing === "true", padding: Object.fromEntries(["top", "right", "bottom", "left"].map(side => [side, parseFloat(c["padding" + side[0].toUpperCase() + side.slice(1)]) || 0])) };
         } catch { /* Preserve the legacy extraction for unsupported original text. */ }
       }
       list.push({
@@ -924,12 +1048,12 @@
     hideNative(ids) {
       const css = document.createElement("style");
       css.id = "sd-hide-native";
-      css.textContent = ids
-        .map(
-          (id) =>
-            `[data-sd-id="${CSS.escape(id)}"],[data-sd-id="${CSS.escape(id)}"] *{color:transparent!important;-webkit-text-fill-color:transparent!important;text-shadow:none!important}img[data-sd-id="${CSS.escape(id)}"]{visibility:hidden!important}`,
-        )
-        .join("\n");
+      css.textContent = ids.map(id => {
+        const selector = `[data-sd-id="${CSS.escape(id)}"]`;
+        const node = document.querySelector(selector);
+        if (["image", "shape", "group"].includes(node?.dataset.sdKind)) return `${selector},${selector} *{visibility:hidden!important}`;
+        return `${selector},${selector} *{color:transparent!important;-webkit-text-fill-color:transparent!important;text-shadow:none!important}img${selector}{visibility:hidden!important}`;
+      }).join("\n");
       document.head.append(css);
     },
     showNative() {
@@ -943,6 +1067,7 @@
     },
   };
   document.fonts.ready.then(() => {
+    Objects.refresh(document);
     for (const el of document.querySelectorAll('[data-sd-rich="true"]')) TextEditor.fit(el);
     if (edit) report();
   });

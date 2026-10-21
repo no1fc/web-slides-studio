@@ -521,7 +521,7 @@ export async function startStudio(opts = {}) {
         return;
       }
       const p = url.pathname === "/" ? "index.html" : url.pathname.slice(1);
-      if (!["index.html", "style.css", "app.js", "authoring-ui.js", "jszip.min.js"].includes(p)) {
+      if (!["index.html", "style.css", "app.js", "authoring-ui.js", "jszip.min.js", "text-model.js", "object-model.js"].includes(p)) {
         send(res, 404, { error: "페이지를 찾을 수 없습니다." });
         return;
       }
@@ -551,7 +551,7 @@ export async function startStudio(opts = {}) {
         return;
       }
       const url = new URL(req.url, contentOrigin);
-      if (["/_studio/bridge.js", "/_studio/text-model.js", "/_studio/text-editor.js"].includes(url.pathname)) {
+      if (["/_studio/bridge.js", "/_studio/text-model.js", "/_studio/text-editor.js", "/_studio/object-model.js"].includes(url.pathname)) {
         send(
           res,
           200,
@@ -608,7 +608,7 @@ export async function startStudio(opts = {}) {
           .replace(/<head([^>]*)>/i, "<head$1>" + bootstrap)
           .replace(
             /<\/body>/i,
-            `<script id="sd-config" type="application/json">${enc(config)}</script><script src="/_studio/text-model.js"></script><script src="/_studio/text-editor.js"></script><script src="/_studio/bridge.js"></script></body>`,
+            `<script id="sd-config" type="application/json">${enc(config)}</script><script src="/_studio/text-model.js"></script><script src="/_studio/text-editor.js"></script><script src="/_studio/object-model.js"></script><script src="/_studio/bridge.js"></script></body>`,
           );
         send(res, 200, html, "text/html; charset=utf-8");
         return;
