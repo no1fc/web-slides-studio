@@ -54,6 +54,35 @@ test("scene overrides survive duplication and original option removes override",
     s = (await app.store.get(d.id)).state;
     assert.equal(Object.hasOwn(s.scenes, "s0"), false);
   }));
+test("scene input is preserved while a queued frame navigation settles editing", () =>
+  fixture(async (app, browser, d) => {
+    const p = await open(app, browser, d);
+    const firstSave = p.waitForResponse(r => r.url().endsWith("/save") && r.request().method() === "POST");
+    await p.locator("#sceneValue").selectOption("dim");
+    await firstSave;
+    await p.waitForFunction(() => document.querySelector("#saveStatus").textContent.startsWith("저장됨"));
+    await p.frameLocator("#deckFrame").locator(".slide.active").waitFor();
+    const secondSave = p.waitForResponse(r => r.url().endsWith("/save") && r.request().method() === "POST");
+    await p.evaluate(() => {
+      const f = document.querySelector("#deckFrame"), s = document.querySelector("#sceneValue");
+      f.contentWindow.postMessage({ studio: true, type: "go", index: 0 }, new URL(f.src).origin);
+      s.value = "";
+      s.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await secondSave;
+    assert.equal(Object.hasOwn((await app.store.get(d.id)).state.scenes, "s0"), false);
+    await p.waitForFunction(() => document.querySelector("#saveStatus").textContent.startsWith("저장됨"));
+    await p.frameLocator("#deckFrame").locator(".slide.active").waitFor();
+    const thirdSave = p.waitForResponse(r => r.url().endsWith("/save") && r.request().method() === "POST");
+    await p.evaluate(() => {
+      const f = document.querySelector("#deckFrame"), b = document.querySelector("#backgroundValue");
+      f.contentWindow.postMessage({ studio: true, type: "go", index: 0 }, new URL(f.src).origin);
+      b.checked = false;
+      b.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await thirdSave;
+    assert.equal((await app.store.get(d.id)).state.background, false);
+  }));
 test("conflicting edits can be saved deliberately as a new version", () =>
   fixture(async (app, browser, d) => {
     const a = await open(app, browser, d),

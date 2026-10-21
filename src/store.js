@@ -10,6 +10,7 @@ import {
 import { join } from "node:path";
 import { randomUUID, randomBytes } from "node:crypto";
 import { initialState, validateState } from "./deck.js";
+import { authoringAssets } from "./authoring.js";
 export class Store {
   constructor(root) {
     this.root = root;
@@ -80,7 +81,7 @@ export class Store {
     const snap = JSON.parse(
       await readFile(this.path(id, "revisions", n + ".json"), "utf8"),
     );
-    return { ...meta, ...snap, revision: n };
+    return { ...meta, ...snap, state: validateState(snap.state, meta), revision: n };
   }
   async list() {
     const entries = await readdir(this.root);
@@ -115,6 +116,13 @@ export class Store {
           throw new Error(
             "이미지 파일이 삭제되었거나 없습니다. 다시 올려 주세요.",
           );
+        }
+      }
+      for (const asset of authoringAssets(state)) {
+        try {
+          if (!(await stat(this.path(id, "assets", asset))).isFile()) throw new Error("missing");
+        } catch {
+          throw new Error(`코드에서 사용하는 파일이 없습니다: ${asset}`);
         }
       }
       const revision = meta.revision + 1;

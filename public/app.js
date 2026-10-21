@@ -11,16 +11,37 @@ let decks = [],
   state = null,
   index = 0,
   selected = null,
+  selectedElements = [],
+  layerItems = [],
+  objectClipboard = null,
   undo = [],
   redo = [],
   dirty = false,
   blocked = false,
   saveTimer = null,
   saving = null,
+  editEpoch = 0,
   filter = "all",
   folder = "",
   replaceImage = false;
 const frame = $("deckFrame");
+function layoutCanvas() {
+  const viewport = $("canvasViewport"), wrap = $("canvasWrap");
+  if (!viewport.clientWidth || !viewport.clientHeight) return;
+  const zoom = $("zoomValue").value;
+  const factor = zoom === "fit"
+    ? Math.min(viewport.clientWidth / 1920, viewport.clientHeight / 1080)
+    : Number(zoom) / 100;
+  wrap.style.width = `${Math.floor(1920 * factor)}px`;
+  wrap.style.height = `${Math.floor(1080 * factor)}px`;
+  wrap.style.marginTop = `${Math.max(0, (viewport.clientHeight - 1080 * factor) / 2)}px`;
+}
+new ResizeObserver(layoutCanvas).observe($("canvasViewport"));
+$("zoomValue").onchange = () => { layoutCanvas(); $("canvasViewport").scrollTo(0, 0); };
+$("lockAspect").onchange = () => post("settings", { lockAspect: $("lockAspect").checked });
+let frameReady = false;
+let editorSession = null, pendingSelection = [], objectWork = Promise.resolve(), objectBusy = false;
+const pendingEdits = new Map();
 const clone = (x) => JSON.parse(JSON.stringify(x));
 const uid = (p) => p + "-" + crypto.randomUUID();
 function toast(text) {
@@ -57,6 +78,7 @@ const action =
   (fn) =>
   async (...args) => {
     try {
+      await settleEditing();
       await fn(...args);
     } catch (e) {
       toast(e.message);
@@ -65,10 +87,24 @@ const action =
 const post = (type, data = {}) => {
   if (deck)
     frame.contentWindow?.postMessage(
-      { studio: true, type, ...data },
+      { studio: true, type, editorSession, ...data },
       new URL(deck.previewUrl).origin,
     );
 };
+async function settleEditing() {
+  if (!deck) return;
+  if (!frameReady) { await objectWork; return; }
+  const requestId = crypto.randomUUID();
+  await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      pendingEdits.delete(requestId);
+      reject(new Error("편집 화면의 입력을 확정하지 못했습니다. 잠시 후 다시 시도해 주세요."));
+    }, 3000);
+    pendingEdits.set(requestId, () => { clearTimeout(timer); resolve(); });
+    post("commit-edit", { requestId });
+  });
+  await objectWork;
+}
 function dialog(title) {
   $("dialog").classList.remove("files-dialog");
   $("dialogTitle").textContent = title;
@@ -78,6 +114,7 @@ function dialog(title) {
 }
 $("closeDialog").onclick = () => $("dialog").close();
 function mark() {
+  editEpoch++;
   dirty = true;
   $("saveStatus").textContent = "저장 대기";
   clearTimeout(saveTimer);
@@ -100,9 +137,13 @@ async function flush() {
   const snapshot = clone(state),
     id = deck.id;
   const revision = deck.revision;
+  const epoch = editEpoch;
   $("saveStatus").textContent = "저장 중…";
   saving = api(`/decks/${id}/save`, "POST", { revision, state: snapshot })
     .then((d) => {
+      if (!deck || deck.id !== id) return;
+      // Only normalize the snapshot that was acknowledged; later edits stay local.
+      if (editEpoch === epoch) state = clone(d.state);
       deck = { ...d, state };
       $("saveStatus").textContent = dirty
         ? "저장 대기"
@@ -112,7 +153,8 @@ async function flush() {
       dirty = true;
       blocked = e.status === 409;
       $("saveStatus").textContent = "저장 실패 · 변경 보존 중";
-      if (blocked) conflictDialog();
+      if (blocked && !$("dialog").classList.contains("authoring-dialog"))
+        conflictDialog();
       throw e;
     })
     .finally(() => {
@@ -186,9 +228,19 @@ function conflictDialog() {
 $("saveStatus").onclick = () => {
   if (blocked) conflictDialog();
 };
-function refreshFrame() {
-  frame.src = deck.previewUrl + "&mode=edit#" + (index + 1);
+function refreshFrame(selectIds = []) {
+  frameReady = false;
+  editorSession = crypto.randomUUID();
+  pendingSelection = selectIds;
+  frame.src = deck.previewUrl + "&mode=edit&editorSession=" + editorSession + "#" + (index + 1);
+  layerItems = [];
+  clearSelection();
+  renderLayers();
+}
+function clearSelection() {
   selected = null;
+  selectedElements = [];
+  $("lockAspect").checked = false;
   properties();
 }
 async function structural(fn) {
@@ -201,12 +253,27 @@ async function structural(fn) {
   refreshFrame();
 }
 function patch(p) {
-  if (!selected) return;
+  if (!selected || !activeElement(selected.id) || objectLocked(selected.id)) return;
   checkpoint();
   state.patches[selected.id] = { ...(state.patches[selected.id] || {}), ...p };
   post("patch", { id: selected.id, patch: p });
   Object.assign(selected, p);
+  if (p.hidden) {
+    clearSelection();
+  }
   mark();
+}
+function activeElement(id) {
+  const slide = state?.order[index];
+  if (!slide || typeof id !== "string") return false;
+  if (state.added.some((a) => a.id === id && a.slide === slide)) return true;
+  if (state.slideCode?.[slide]) {
+    const doc = new DOMParser().parseFromString(state.slideCode[slide].html, "text/html");
+    return [...doc.querySelectorAll("[data-sd-id]")].some((e) => e.dataset.sdId === id);
+  }
+  const source = Object.hasOwn(state.clones, slide) ? state.clones[slide] : slide;
+  return deck.elements.some((e) => e.slide === source &&
+    (slide === source ? e.id : slide + "--" + e.id) === id);
 }
 async function history(back) {
   const source = back ? undo : redo,
@@ -224,9 +291,16 @@ function properties() {
   $("noSelection").hidden = !!s;
   $("properties").hidden = !s;
   $("selectedLabel").textContent = s
-    ? `${s.tag.toUpperCase()} 선택됨`
-    : "선택한 요소 없음";
+    ? `${s.tag.toUpperCase()} 선택됨${objectLocked(s.id) ? " · 잠금" : ""}`
+    : selectedElements.length > 1 ? `${selectedElements.length}개 요소 선택됨` : "선택한 요소 없음";
+  $("selectionHelp").textContent = selectedElements.length > 1
+    ? "여러 개체를 함께 이동·정렬할 수 있습니다. 크기와 내용을 바꾸려면 하나만 선택하세요."
+    : "슬라이드 또는 레이어 목록에서 개체를 선택하세요.";
+  $("properties").querySelectorAll("input,textarea,button,select").forEach(control => { control.disabled = !!s && objectLocked(s.id); });
+  arrangementTools();
   if (!s) return;
+  $("precisionNote").textContent = objectLocked(s.id) ? "잠긴 개체입니다. 레이어 목록에서 잠금을 해제하세요." : s.precisionReason || "";
+  $("precisionNote").hidden = !$("precisionNote").textContent;
   $("textField").hidden = s.tag === "img";
   $("replaceImageBtn").hidden = s.tag !== "img";
   $("textValue").value = s.text;
@@ -242,6 +316,175 @@ function properties() {
   ])
     $(id).value = s[key] ?? 0;
 }
+function objectLocked(id) {
+  return !!(state?.patches[id]?.locked || layerItems.find(item => item.id === id)?.locked || selectedElements.find(item => item.id === id)?.locked);
+}
+const arrangementCommands = {
+  duplicateObjectsBtn: "duplicate", copyObjectsBtn: "copy",
+  alignLeftBtn: "align-left", alignCenterBtn: "align-center", alignRightBtn: "align-right",
+  alignTopBtn: "align-top", alignMiddleBtn: "align-middle", alignBottomBtn: "align-bottom",
+  distributeXBtn: "distribute-x", distributeYBtn: "distribute-y",
+  layerFrontBtn: "front", layerForwardBtn: "forward", layerBackwardBtn: "backward", layerBackBtn: "back",
+  hideObjectsBtn: "hide", lockObjectsBtn: "lock",
+};
+function arrangementTools() {
+  const count = selectedElements.length, unavailable = !frameReady || objectBusy;
+  const editable = count > 0 && !selectedElements.some(item => objectLocked(item.id));
+  const precise = editable && !selectedElements.some(item => item.precisionReason);
+  const layers = selectedElements.map(item => layerItems.find(layer => layer.id === item.id));
+  const layerable = editable && layers.every(item => item?.layerable) && new Set(layers.map(item => item?.group)).size === 1;
+  $("selectionCount").textContent = count ? `${count}개 선택` : "선택 없음";
+  for (const [id, name] of Object.entries(arrangementCommands)) {
+    const enabled = name.startsWith("align-") ? precise && count >= 2
+      : name.startsWith("distribute-") ? precise && count >= 3
+      : ["front", "forward", "backward", "back"].includes(name) ? layerable
+      : editable;
+    $(id).disabled = unavailable || !enabled;
+  }
+  $("pasteObjectsBtn").disabled = unavailable || !objectClipboard || objectClipboard.deckId !== deck?.id;
+}
+function renderLayers() {
+  const list = $("layerList");
+  list.replaceChildren();
+  const groups = new Map();
+  layerItems.forEach((item, order) => {
+    if (!groups.has(item.group)) groups.set(item.group, []);
+    groups.get(item.group).push({ ...item, order });
+  });
+  let groupNumber = 0;
+  for (const items of groups.values()) {
+    groupNumber++;
+    if (groups.size > 1) list.append(el("div", `묶음 ${groupNumber}`, "layer-group"));
+    items.sort((a, b) => b.z - a.z || b.order - a.order);
+    for (const item of items) {
+      const isSelected = selectedElements.some(s => s.id === item.id);
+      const row = el("div", undefined, "layer-row" + (isSelected ? " selected" : "") + (item.hidden ? " is-hidden" : ""));
+      row.dataset.layerId = item.id;
+      const choose = el("button", item.label || item.tag.toUpperCase(), "layer-select");
+      choose.dataset.layerAction = "select";
+      choose.title = `${item.label || item.tag}${item.hidden ? " · 숨김" : ""}${item.locked ? " · 잠금" : ""}`;
+      choose.setAttribute("aria-pressed", String(isSelected));
+      choose.onclick = action(event => {
+        if (!activeElement(item.id)) return;
+        let ids = [item.id];
+        if (event.shiftKey || event.ctrlKey || event.metaKey) {
+          const current = selectedElements.map(s => s.id);
+          ids = current.includes(item.id) ? current.filter(id => id !== item.id) : [...current, item.id];
+        }
+        post("select-ids", { ids });
+        frame.focus();
+      });
+      row.append(choose);
+      for (const [key, on, off] of [["hidden", "숨김", "표시"], ["locked", "잠금", "해제"]]) {
+        const toggle = el("button", item[key] ? on : off);
+        toggle.dataset.layerAction = key;
+        toggle.title = key === "hidden" ? (item.hidden ? "개체 표시" : "개체 숨기기") : (item.locked ? "잠금 해제" : "개체 잠금");
+        toggle.setAttribute("aria-label", `${item.label || item.tag} ${toggle.title}`);
+        toggle.setAttribute("aria-pressed", String(!!item[key]));
+        toggle.onclick = action(() => {
+          if (activeElement(item.id)) post("layer-toggle", { id: item.id, key });
+        });
+        row.append(toggle);
+      }
+      list.append(row);
+    }
+  }
+  if (!layerItems.length) list.append(el("p", frameReady ? "이 슬라이드에 편집할 개체가 없습니다." : "개체를 불러오는 중입니다.", "tool-help"));
+  arrangementTools();
+}
+function objectContext() {
+  return { deckId: deck?.id, slide: state?.order[index], session: editorSession };
+}
+function currentObjectContext(context) {
+  return !!deck && deck.id === context.deckId && state.order[index] === context.slide && editorSession === context.session;
+}
+function queueObjectWork(context, fn, restoreOnFailure = false) {
+  const work = objectWork.then(async () => {
+    if (!currentObjectContext(context)) return;
+    objectBusy = true;
+    arrangementTools();
+    try { await fn(); }
+    catch (error) {
+      if (currentObjectContext(context)) {
+        toast(error.message);
+        if (restoreOnFailure) {
+          try {
+            // A concurrent single-object edit may still be dirty: reload its saved revision.
+            await flush();
+            if (currentObjectContext(context)) refreshFrame(selectedElements.map(item => item.id));
+          } catch (saveError) { toast(`${error.message} 현재 편집 저장도 실패했습니다: ${saveError.message}`); }
+        }
+      }
+    } finally { objectBusy = false; arrangementTools(); }
+  });
+  objectWork = work;
+  return work;
+}
+async function validateObjectState(candidate, context) {
+  const epoch = editEpoch;
+  const result = await api(`/decks/${context.deckId}/validate`, "POST", { state: candidate });
+  if (!currentObjectContext(context)) return null;
+  if (editEpoch !== epoch) throw new Error("검증 중 다른 편집이 적용되었습니다. 명령을 다시 실행해 주세요.");
+  return clone(result.state);
+}
+function receiveBatch(changes) {
+  if (!Array.isArray(changes) || !changes.length || changes.length > 2000) return;
+  const seen = new Set();
+  for (const change of changes) {
+    if (!change || !activeElement(change.id) || seen.has(change.id) ||
+      !change.patch || typeof change.patch !== "object" || Array.isArray(change.patch) ||
+      // Reordering one sibling renumbers the container's z indices, including locked siblings.
+      (objectLocked(change.id) && Object.keys(change.patch).some(key => !["locked", "hidden", "z", "layerPosition"].includes(key)))) return;
+    seen.add(change.id);
+  }
+  const context = objectContext();
+  queueObjectWork(context, async () => {
+    const candidate = clone(state);
+    for (const { id, patch: value } of changes) candidate.patches[id] = { ...(candidate.patches[id] || {}), ...value };
+    const validated = await validateObjectState(candidate, context);
+    if (!validated) return;
+    checkpoint();
+    state = validated;
+    mark();
+    properties();
+  }, true);
+}
+function receiveObjects(operation, objects, context = objectContext()) {
+  if (!["copy", "duplicate", "paste"].includes(operation) || !Array.isArray(objects) || !objects.length || objects.length > 2000) return;
+  return queueObjectWork(context, async () => {
+    const candidate = clone(state), ids = [];
+    for (const object of objects) {
+      if (!object || typeof object !== "object" || Array.isArray(object)) throw new Error("복사할 개체 정보를 확인해 주세요.");
+      const copy = { ...clone(object), id: uid("a"), slide: context.slide };
+      if (operation !== "copy") { copy.x = (copy.x ?? 0) + 24; copy.y = (copy.y ?? 0) + 24; }
+      ids.push(copy.id);
+      candidate.added.push(copy);
+    }
+    const validated = await validateObjectState(candidate, context);
+    if (!validated) return;
+    if (operation === "copy") {
+      objectClipboard = { deckId: context.deckId, objects: validated.added.filter(item => ids.includes(item.id)).map(item => {
+        const copy = clone(item); delete copy.id; delete copy.slide; return copy;
+      }) };
+      toast(`${objects.length}개 개체를 복사했습니다. 이 자료의 다른 슬라이드에도 붙여넣을 수 있습니다.`);
+      return;
+    }
+    checkpoint();
+    state = validated;
+    mark();
+    await flush();
+    if (!currentObjectContext(context)) return;
+    renderSlides();
+    refreshFrame(ids);
+  });
+}
+function pasteObjects() {
+  if (!objectClipboard || objectClipboard.deckId !== deck?.id) return;
+  return receiveObjects("paste", clone(objectClipboard.objects));
+}
+for (const [id, name] of Object.entries(arrangementCommands))
+  $(id).onclick = action(() => { if (!$(id).disabled) post("command", { name }); });
+$("pasteObjectsBtn").onclick = action(pasteObjects);
 function slideTitle(id) {
   const source = state.clones[id] ?? id;
   const s = deck.slides.find((s) => s.id === source);
@@ -260,11 +503,14 @@ function renderSlides() {
       el("span", String(i + 1).padStart(2, "0")),
       el("div", slideTitle(id)),
     );
-    b.onclick = () => {
+    b.onclick = action(() => {
+      clearSelection();
+      layerItems = [];
       index = i;
       post("go", { index });
       renderSlides();
-    };
+      renderLayers();
+    });
     list.append(b);
   });
   $("slideLabel").textContent = `${index + 1} / ${state.order.length}`;
@@ -288,25 +534,67 @@ window.addEventListener("message", (e) => {
   )
     return;
   const d = e.data;
-  if (d.type === "select" && d.element && typeof d.element.id === "string") {
-    selected = d.element;
-    properties();
+  if (d.editorSession && d.editorSession !== editorSession) return;
+  if (["select", "change", "batch-change", "layers", "objects", "paste"].includes(d.type) &&
+    d.slide !== undefined && d.slide !== state.order[index]) return;
+  if (d.type === "pan" && Number.isFinite(d.dx) && Number.isFinite(d.dy)) {
+    $("canvasViewport").scrollBy(d.dx, d.dy);
+    return;
   }
-  if (d.type === "change" && typeof d.id === "string") {
+  if (d.type === "edit-settled") {
+    pendingEdits.get(d.requestId)?.();
+    pendingEdits.delete(d.requestId);
+    return;
+  }
+  if (d.type === "select") {
+    const elements = Array.isArray(d.elements) ? d.elements : d.element ? [d.element] : [];
+    if (elements.some(item => !item || !activeElement(item.id)) || new Set(elements.map(item => item.id)).size !== elements.length) return;
+    const single = elements.length === 1 ? elements[0] : null;
+    if (single?.id !== selected?.id) $("lockAspect").checked = false;
+    selectedElements = elements;
+    selected = single;
+    properties();
+    renderLayers();
+  }
+  if (d.type === "change" && activeElement(d.id) && d.patch && typeof d.patch === "object" && !Array.isArray(d.patch)) {
+    if (objectLocked(d.id) && Object.keys(d.patch).some(key => !["locked", "hidden"].includes(key))) return;
     checkpoint();
     state.patches[d.id] = { ...(state.patches[d.id] || {}), ...d.patch };
     mark();
   }
+  if (d.type === "batch-change" && frameReady) receiveBatch(d.changes);
+  if (d.type === "layers" && Array.isArray(d.items)) {
+    if (d.items.some(item => !item || !activeElement(item.id))) return;
+    layerItems = d.items;
+    properties();
+    renderLayers();
+  }
+  if (d.type === "objects" && frameReady && d.slide === state.order[index]) receiveObjects(d.operation, d.objects);
+  if (d.type === "paste" && frameReady) action(pasteObjects)();
+  if (d.type === "notice" && typeof d.message === "string") toast(d.message);
   if (d.type === "navigate" && Number.isInteger(d.index)) {
+    if (d.index < 0 || d.index >= state.order.length) return;
+    if (index !== d.index) {
+      clearSelection();
+      layerItems = [];
+      renderLayers();
+    }
     index = d.index;
     renderSlides();
   }
-  if (d.type === "ready") post("go", { index });
+  if (d.type === "ready") {
+    frameReady = true;
+    post("go", { index });
+    if (pendingSelection.length) post("select-ids", { ids: pendingSelection });
+    pendingSelection = [];
+    arrangementTools();
+  }
   if (d.type === "undo" || d.type === "redo")
     action(() => history(d.type === "undo"))();
 });
 async function openDeck(id) {
   if (deck) await flush();
+  if (objectClipboard?.deckId !== id) objectClipboard = null;
   deck = await api("/decks/" + id);
   state = clone(deck.state);
   dirty = false;
@@ -316,6 +604,7 @@ async function openDeck(id) {
   index = 0;
   $("library").hidden = true;
   $("editor").hidden = false;
+  layoutCanvas();
   $("deckTitle").value = deck.title;
   $("saveStatus").textContent = `저장됨 · v${deck.revision}`;
   location.hash = "deck=" + id;
@@ -325,6 +614,11 @@ async function openDeck(id) {
 async function library() {
   if (deck) await flush();
   deck = null;
+  frameReady = false;
+  editorSession = null;
+  pendingSelection = [];
+  layerItems = [];
+  clearSelection();
   frame.src = "about:blank";
   $("editor").hidden = true;
   $("library").hidden = false;
@@ -526,7 +820,17 @@ for (const [id, key] of [
 ])
   $(id).onchange = () => {
     const v = Number($(id).value);
-    if ($(id).checkValidity()) patch({ [key]: v });
+    if ($(id).checkValidity() && $(id).value !== "") {
+      const change = { [key]: v };
+      if (selected && $("lockAspect").checked && ["w", "h"].includes(key)) {
+        const other = key === "w" ? "h" : "w";
+        const extra = key === "w" ? selected.extraW || 0 : selected.extraH || 0;
+        const otherExtra = key === "w" ? selected.extraH || 0 : selected.extraW || 0;
+        change[other] = Math.round(((selected[other] + otherExtra) * (v + extra) / (selected[key] + extra) - otherExtra) * 100) / 100;
+        if (change[other] < 1 || change[other] > 5000) { toast("비율을 유지한 크기는 1~5000 범위여야 합니다."); properties(); return; }
+      }
+      patch(change);
+    }
     else toast("입력 범위를 확인해 주세요.");
   };
 $("colorValue").onchange = () => patch({ color: $("colorValue").value });
@@ -567,6 +871,7 @@ $("duplicateSlideBtn").onclick = action(() =>
       id = uid("s"),
       source = Object.hasOwn(state.clones, old) ? state.clones[old] : old;
     state.clones[id] = source;
+    duplicateAuthoring(old, id, source);
     if (Object.hasOwn(state.scenes, old)) state.scenes[id] = state.scenes[old];
     state.order.splice(++index, 0, id);
     for (const e of deck.elements.filter((e) => e.slide === source)) {
@@ -617,6 +922,7 @@ $("addImageBtn").onclick = () => {
   $("imageInput").click();
 };
 $("replaceImageBtn").onclick = () => {
+  if (!selected || objectLocked(selected.id)) return;
   replaceImage = true;
   $("imageInput").click();
 };
@@ -645,16 +951,17 @@ $("imageInput").onchange = action(async (e) => {
     );
   e.target.value = "";
 });
-$("backgroundValue").onchange = action(() =>
-  structural(() => (state.background = $("backgroundValue").checked)),
-);
-$("sceneValue").onchange = action(() =>
-  structural(() => {
-    const value = $("sceneValue").value;
-    if (value) state.scenes[state.order[index]] = value;
-    else delete state.scenes[state.order[index]];
-  }),
-);
+$("backgroundValue").onchange = (e) => {
+  const checked = e.target.checked;
+  return action(() => structural(() => (state.background = checked)))();
+};
+$("sceneValue").onchange = (e) => {
+  const value = e.target.value, slide = state.order[index];
+  return action(() => structural(() => {
+    if (value) state.scenes[slide] = value;
+    else delete state.scenes[slide];
+  }))();
+};
 $("previewBtn").onclick = action(async () => {
   const win = window.open("about:blank", "_blank");
   await flush();
@@ -950,16 +1257,24 @@ $("logoutBtn").onclick = action(async () => {
   location.reload();
 });
 window.addEventListener("beforeunload", (e) => {
-  if (dirty || saving) {
+  if (dirty || saving || window.authoringHasDraft?.()) {
     e.preventDefault();
     e.returnValue = "";
   }
 });
 document.addEventListener("keydown", (e) => {
-  if (!deck || /INPUT|TEXTAREA/.test(e.target.tagName)) return;
+  if (!deck || e.isComposing || e.target.isContentEditable || /INPUT|TEXTAREA|SELECT/.test(e.target.tagName) || $("dialog").open) return;
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
     e.preventDefault();
     action(() => history(!e.shiftKey))();
+  } else if ((e.ctrlKey || e.metaKey) && !e.altKey) {
+    const name = { d: "duplicate", c: "copy", v: "paste", a: "select-all" }[e.key.toLowerCase()];
+    if (!name) return;
+    e.preventDefault();
+    action(() => {
+      if (name === "paste") return pasteObjects();
+      post("command", { name });
+    })();
   }
 });
 async function boot() {

@@ -21,19 +21,27 @@ flowchart LR
 | --- | --- |
 | `src/archive.js` | ZIP 원시 디렉터리·중복·경로·크기 검사, 허용 자산 수집 |
 | `src/deck.js` | DOM 식별자, 편집 상태 검증, 원본에 수정 적용 |
+| `src/authoring.js` | HTML/CSS 정규화, 코드 개체 ID, 마스터·코드 렌더링, 코드·복제 자산 참조 수집 |
 | `src/store.js` | 메타데이터·불변 revision·공유·복제·잠금 |
 | `src/auth.js` | 암호 해시 저장, 검증, 인증 변경 직렬화 |
 | `src/files.js` | 자산 열거·용량·참조 조사·웹 원본 ZIP |
 | `src/server.js` | 인증·Origin/Host·API·콘텐츠·출력 작업 관리 |
 | `src/export.js` | Chromium 캡처, HTML/PDF/PPTX 생성 |
-| `public/app.js` | 자료실·편집 UI·자동 저장·파일 관리·암호 변경 |
-| `public/bridge.js` | 콘텐츠 iframe의 선택·이동·발표·출력 연결 |
+| `public/app.js` | 자료실·편집 UI·일괄 history·자동 저장·레이어·앱 내부 복사·파일 관리·암호 변경 |
+| `public/authoring-ui.js` | HTML/CSS·JSON·마스터 편집창과 검증·초안 보존 |
+| `public/bridge.js` | 콘텐츠 iframe의 DOM 선택·기하 계산·정밀 조작·배치·복제 스냅샷·발표·출력 연결 |
 
 ## 편집과 revision
 
 원본 HTML·자산을 유지하고 텍스트·이미지·배치·슬라이드 순서 등을 JSON 상태로 저장합니다. 각 저장 요청은 기준 revision을 포함합니다. 서버의 최신 revision과 다르면 409를 반환하며 자동으로 덮어쓰지 않습니다.
 
 복원은 선택한 과거 상태를 현재 기준 revision 위에 새 버전으로 저장합니다. 공유 링크는 게시한 revision에 고정되며 다시 게시할 때만 최신 내용으로 바뀝니다.
+
+상태는 `schemaVersion: 1`을 사용합니다. 과거 상태를 읽을 때 빠진 코드·마스터 필드를 보완하며 과거 revision 파일을 덮어쓰지 않습니다. `slideCode`에는 슬라이드별 HTML/CSS, `masters`에는 공통 구성, `slideMasters`에는 연결을 저장합니다. `patches`에는 기존 위치·크기·내용에 더해 `locked`, `z`, `layerPosition`을 저장할 수 있으며, 독립 HTML 복제 개체는 `added`에 포함됩니다. 알 수 없는 필드와 지원하지 않는 버전은 거절합니다.
+
+브라우저의 bridge는 실제 DOM의 선택과 좌표를 계산하고 일괄 변경을 부모 UI에 전달합니다. 부모는 명령 단위로 검증·history·저장을 처리합니다. 다중 조작 하나는 Undo 한 번에 대응하며, 드래그 취소는 선택 개체 전체를 되돌립니다. 복제·붙여넣기는 새 개체 ID와 독립 상태를 만들고 같은 자료 안의 앱 내부 복사 기능을 사용합니다.
+
+레이어 순서는 같은 DOM 부모의 편집 개체 사이에 적용합니다. 다른 부모의 CSS stacking context를 평탄화하지 않습니다. `locked`는 편집 조작 보호이며 인증·접근 권한 제어가 아닙니다. 코드·JSON의 명시적 변경은 별도로 검증합니다.
 
 ## 관리 API
 
@@ -52,6 +60,8 @@ flowchart LR
 | PATCH `/api/decks/:id` | 제목·폴더·휴지통 상태 |
 | DELETE `/api/decks/:id` | 휴지통 자료의 완전 삭제 |
 | POST `/api/decks/:id/save` | `{revision,state}` 저장 |
+| GET `/api/decks/:id/authoring?slide=s0` | 현재 저장 상태의 슬라이드 편집 소스 `{slide,html,css}` 조회 |
+| POST `/api/decks/:id/validate` | `{state}` 검증·정규화 후 `{state}` 반환. 저장하지 않음 |
 | GET `/api/decks/:id/revisions` | 최근 최대 100개 이력 목록 |
 | POST `/api/decks/:id/restore` | `{revision,target}`로 복원 |
 | POST `/api/decks/:id/duplicate` | 독립 사본 생성 |
@@ -66,6 +76,10 @@ flowchart LR
 | GET `/api/jobs/:jobId/download` | 완료한 출력 다운로드 |
 
 파일 다운로드는 관리자 origin에서 HTML을 실행하지 않도록 attachment와 이진 콘텐츠 유형으로 제공합니다. 원본 ZIP이나 메타데이터를 직접 정적 경로에 노출하지 않습니다.
+
+`authoring`은 저장된 슬라이드 코드가 있으면 해당 코드를, 없으면 원본 슬라이드 내부 HTML을 반환합니다. 빈 슬라이드는 빈 소스를 반환하며 복제 슬라이드의 편집 ID는 해당 슬라이드에 맞춥니다. 화면의 개체별 patch·추가 개체·마스터를 모두 합성한 최종 HTML 조회 API는 아닙니다.
+
+`validate`는 인증·쓰기 Origin 검사를 거쳐 상태 구조와 HTML/CSS 허용 범위, 개체 ID·수치 등을 검증합니다. 파일을 쓰거나 revision을 증가시키지 않으며, 실제 자산 파일 존재 여부도 여기서 확인하지 않습니다. `save`는 기준 revision 충돌 검사와 상태 검증 뒤 이미지·코드·마스터·복제 HTML의 실제 자산 존재를 확인한 후 새 revision을 저장합니다. 따라서 검증 성공 후에도 누락 자산이나 동시 저장 때문에 저장이 실패할 수 있습니다.
 
 ## 콘텐츠·출력 경계
 

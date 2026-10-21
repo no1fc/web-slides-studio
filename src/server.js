@@ -7,7 +7,8 @@ import { Store } from "./store.js";
 import { PasswordStore } from "./auth.js";
 import { inventory, sourceArchive, collectFiles } from "./files.js";
 import { importArchive, safePath } from "./archive.js";
-import { renderDeck, prepareDeck } from "./deck.js";
+import { renderDeck, prepareDeck, validateState } from "./deck.js";
+import { authoringSource } from "./authoring.js";
 const base = fileURLToPath(new URL("..", import.meta.url));
 const types = {
   ".html": "text/html; charset=utf-8",
@@ -289,6 +290,17 @@ export async function startStudio(opts = {}) {
             send(res, 200, expose(await store.save(id, b.revision, b.state)));
             return;
           }
+          if (action === "authoring" && req.method === "GET") {
+            const d = await store.get(id);
+            const html = await readFile(store.path(id, "assets/index.html"), "utf8");
+            send(res, 200, authoringSource(html, d.state, url.searchParams.get("slide")));
+            return;
+          }
+          if (action === "validate" && req.method === "POST") {
+            const b = await json(req);
+            send(res, 200, { state: validateState(b.state, await store.meta(id)) });
+            return;
+          }
           if (action === "revisions" && req.method === "GET") {
             send(res, 200, await store.revisions(id));
             return;
@@ -509,7 +521,7 @@ export async function startStudio(opts = {}) {
         return;
       }
       const p = url.pathname === "/" ? "index.html" : url.pathname.slice(1);
-      if (!["index.html", "style.css", "app.js", "jszip.min.js"].includes(p)) {
+      if (!["index.html", "style.css", "app.js", "authoring-ui.js", "jszip.min.js"].includes(p)) {
         send(res, 404, { error: "페이지를 찾을 수 없습니다." });
         return;
       }

@@ -84,7 +84,9 @@ test("password changes require current password, rotate sessions, persist hashes
     assert.equal((await login(app, changed)).status, 200);
     const saved = await readFile(join(root, "_auth.json"), "utf8");
     assert.ok(!saved.includes(initial) && !saved.includes(changed));
-    assert.equal((await stat(join(root, "_auth.json"))).mode & 0o777, 0o600);
+    // Windows uses ACLs rather than the POSIX permission bits returned by stat.
+    if (process.platform !== "win32")
+      assert.equal((await stat(join(root, "_auth.json"))).mode & 0o777, 0o600);
     await app.close();
     app = await startStudio({
       root,

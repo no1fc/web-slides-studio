@@ -423,6 +423,7 @@ p {
 .canvas-main {
   background: #e9eeef;
   min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   padding: 0 25px;
@@ -449,15 +450,23 @@ p {
   padding: 3px 7px;
   border-radius: 4px;
 }
+#canvasViewport {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  position: relative;
+  overscroll-behavior: contain;
+}
 #canvasWrap {
-  aspect-ratio: 16/9;
-  width: 100%;
-  margin: auto 0;
+  margin: 0 auto;
   position: relative;
   background: #101c27;
   box-shadow: 0 12px 35px #17333f20;
   overflow: hidden;
 }
+.zoom-control { display: flex; align-items: center; gap: 7px; margin: 0; }
+.zoom-control select { width: 115px; padding: 5px; font-size: 11px; }
+.precision-note { color: #946119; font-size: 11px; line-height: 1.6; }
 #deckFrame {
   border: 0;
   position: absolute;
@@ -501,9 +510,28 @@ p {
 #noSelection p {
   color: #819398;
   font-size: 12px;
-  padding: 25px 0;
+  padding: 10px 0;
   line-height: 1.9;
 }
+.arrangement-panel, .layers-panel { border-top: 1px solid var(--border); padding: 12px 0; }
+.panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.panel-heading h3 { margin: 0; font-size: 12px; }
+.panel-heading span { color: var(--muted); font-size: 10px; }
+.object-actions, .alignment-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+.distribution-grid, .object-state-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; margin-top: 6px; }
+.arrangement-panel button, .layers-panel button { padding: 7px 4px; font-size: 11px; }
+.arrangement-tools { margin-top: 12px; }
+.arrangement-tools summary { cursor: pointer; color: #526973; font-size: 11px; font-weight: 600; }
+.tool-help { color: var(--muted); font-size: 10px; line-height: 1.5; margin: 8px 0; }
+.layer-order-actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
+#layerList { max-height: 245px; overflow-y: auto; margin-top: 8px; }
+.layer-group { padding: 7px 4px 4px; font-size: 10px; color: var(--muted); border-top: 1px solid #edf1f2; }
+.layer-row { display: grid; grid-template-columns: minmax(0, 1fr) 32px 32px; gap: 3px; margin: 3px 0; }
+.layer-row button { min-width: 0; border-color: transparent; background: #f6f8f8; }
+.layer-row .layer-select { overflow: hidden; text-overflow: ellipsis; text-align: left; padding-left: 7px; }
+.layer-row.selected .layer-select { background: #e8f3f0; color: #07695f; border-color: #72beb9; }
+.layer-row.is-hidden .layer-select { color: #819398; text-decoration: line-through; }
+.layer-row button[aria-pressed="true"] { background: #e9eeee; color: #3a5f66; }
 .prop-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -753,8 +781,9 @@ dialog::backdrop {
     padding: 0 12px;
   }
   #canvasWrap {
-    margin: 20px 0;
+    margin: 0 auto;
   }
+  #canvasViewport { flex: none; height: 55vw; min-height: 200px; }
   .canvas-tools span:nth-child(2) {
     display: none;
   }
@@ -784,6 +813,15 @@ dialog::backdrop {
 .files-dialog {
   width: 760px;
 }
+.editor-toolbar { flex-wrap: wrap; }
+.authoring-dialog { width: min(1100px, 94vw); max-height: 92vh; }
+.authoring-field { display: block; margin: 16px 0; font-size: 13px; font-weight: 600; }
+.authoring-field input, .authoring-field textarea { display: block; width: 100%; margin-top: 8px; box-sizing: border-box; }
+.code-input { font-family: Consolas, monospace; font-size: 13px; line-height: 1.5; tab-size: 2; white-space: pre; min-height: 160px; padding: 12px; resize: vertical; }
+.authoring-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.authoring-error { color: #a13b3b; white-space: pre-wrap; }
+.authoring-dialog #dialogBody > button { margin: 4px 8px 4px 0; }
+.authoring-help { line-height: 1.6; }
 .file-summary {
   display: block;
   margin: 18px 0;

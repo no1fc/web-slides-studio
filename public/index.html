@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="/style.css" />
     <script defer src="/jszip.min.js"></script>
     <script defer src="/app.js"></script>
+    <script defer src="/authoring-ui.js"></script>
   </head>
   <body>
     <div id="toast" role="status" hidden></div>
@@ -103,6 +104,9 @@
           <div class="toolbar-spacer"></div>
           <button id="undoBtn" title="실행 취소 (Ctrl+Z)">↶</button
           ><button id="redoBtn" title="다시 실행 (Ctrl+Shift+Z)">↷</button
+          ><button id="codeBtn">HTML/CSS</button
+          ><button id="jsonBtn">JSON</button
+          ><button id="masterBtn">마스터</button
           ><button id="filesBtn">파일 관리</button
           ><button id="versionsBtn">버전</button
           ><button id="previewBtn">▷ 발표</button
@@ -130,9 +134,17 @@
           <main class="canvas-main">
             <div class="canvas-tools">
               <span id="slideLabel">1 / 21</span
-              ><span>요소를 선택하고 드래그해 배치하세요</span
-              ><span class="size-label">16:9</span>
+              ><span>Shift·Ctrl 클릭으로 여러 요소 선택</span
+              ><label class="zoom-control">배율
+                <select id="zoomValue" aria-label="캔버스 배율">
+                  <option value="fit">화면 맞춤</option>
+                  <option value="25">25%</option><option value="50">50%</option>
+                  <option value="75">75%</option><option value="100">100%</option>
+                  <option value="150">150%</option><option value="200">200%</option>
+                </select>
+              </label>
             </div>
+            <div id="canvasViewport">
             <div id="canvasWrap">
               <iframe
                 id="deckFrame"
@@ -141,8 +153,9 @@
                 allow="fullscreen"
               ></iframe>
             </div>
+            </div>
             <div class="canvas-footer">
-              <span>더블클릭으로 글 수정 · 드래그로 이동</span
+              <span>Shift 비율 · Alt 중심 · 방향키 1px / Shift 10px</span
               ><span id="selectedLabel">선택한 요소 없음</span>
             </div>
           </main>
@@ -155,10 +168,50 @@
               ><button id="addImageBtn">▧ 이미지</button
               ><button id="addShapeBtn">□ 도형</button>
             </div>
+            <section class="arrangement-panel" aria-label="선택과 배치">
+              <div class="panel-heading"><h3>개체 배치</h3><span id="selectionCount" aria-live="polite">선택 없음</span></div>
+              <div class="object-actions">
+                <button id="duplicateObjectsBtn" title="선택한 개체 복제 (Ctrl+D)" disabled>복제</button>
+                <button id="copyObjectsBtn" title="이 자료 안에서 복사 (Ctrl+C)" disabled>복사</button>
+                <button id="pasteObjectsBtn" title="현재 슬라이드에 붙여넣기 (Ctrl+V)" disabled>붙여넣기</button>
+              </div>
+              <details class="arrangement-tools" open>
+                <summary>정렬·분배</summary>
+                <p class="tool-help">선택한 개체 전체 범위에 맞춥니다.</p>
+                <div class="alignment-grid">
+                  <button id="alignLeftBtn" title="왼쪽 정렬" disabled>왼쪽</button>
+                  <button id="alignCenterBtn" title="가로 가운데 정렬" disabled>가운데</button>
+                  <button id="alignRightBtn" title="오른쪽 정렬" disabled>오른쪽</button>
+                  <button id="alignTopBtn" title="위쪽 정렬" disabled>위쪽</button>
+                  <button id="alignMiddleBtn" title="세로 가운데 정렬" disabled>중간</button>
+                  <button id="alignBottomBtn" title="아래쪽 정렬" disabled>아래쪽</button>
+                </div>
+                <div class="distribution-grid">
+                  <button id="distributeXBtn" title="3개 이상 선택 시 가로 간격을 동일하게" disabled>가로 분배</button>
+                  <button id="distributeYBtn" title="3개 이상 선택 시 세로 간격을 동일하게" disabled>세로 분배</button>
+                </div>
+              </details>
+              <div class="object-state-actions">
+                <button id="hideObjectsBtn" disabled>선택 숨기기</button>
+                <button id="lockObjectsBtn" disabled>선택 잠금</button>
+              </div>
+            </section>
+            <section class="layers-panel" aria-label="개체 레이어">
+              <div class="panel-heading"><h3>레이어</h3><span>앞 → 뒤</span></div>
+              <div class="layer-order-actions">
+                <button id="layerFrontBtn" title="같은 묶음에서 맨 앞으로" disabled>맨 앞</button>
+                <button id="layerForwardBtn" title="같은 묶음에서 한 단계 앞으로" disabled>앞</button>
+                <button id="layerBackwardBtn" title="같은 묶음에서 한 단계 뒤로" disabled>뒤</button>
+                <button id="layerBackBtn" title="같은 묶음에서 맨 뒤로" disabled>맨 뒤</button>
+              </div>
+              <p class="tool-help">같은 묶음 안에서 순서를 바꿉니다.</p>
+              <div id="layerList" aria-label="레이어 목록"><p class="tool-help">개체를 불러오는 중입니다.</p></div>
+            </section>
             <div id="noSelection">
-              <p>슬라이드의 글이나 이미지를<br />클릭해 보세요.</p>
+              <p id="selectionHelp">슬라이드의 글이나 이미지를<br />클릭해 보세요.</p>
             </div>
             <div id="properties" hidden>
+              <p id="precisionNote" class="precision-note" hidden></p>
               <label id="textField"
                 >내용<textarea id="textValue" rows="5"></textarea></label
               ><button id="replaceImageBtn" hidden>이미지 교체</button>
@@ -167,30 +220,35 @@
                   >가로 이동<input
                     id="xValue"
                     type="number"
+                    step="any"
                     min="-5000"
                     max="5000" /></label
                 ><label
                   >세로 이동<input
                     id="yValue"
                     type="number"
+                    step="any"
                     min="-5000"
                     max="5000" /></label
                 ><label
                   >너비<input
                     id="wValue"
                     type="number"
+                    step="any"
                     min="1"
                     max="5000" /></label
                 ><label
                   >높이<input
                     id="hValue"
                     type="number"
+                    step="any"
                     min="1"
                     max="5000" /></label
                 ><label
                   >회전 °<input
                     id="rotateValue"
                     type="number"
+                    step="any"
                     min="-360"
                     max="360" /></label
                 ><label
@@ -201,6 +259,7 @@
                     max="400"
                 /></label>
               </div>
+              <label class="switch-row"><span>크기 비율 유지</span><input id="lockAspect" type="checkbox" /></label>
               <div class="prop-grid">
                 <label>글자 색<input id="colorValue" type="color" /></label
                 ><label>배경 색<input id="fillValue" type="color" /></label>
