@@ -551,11 +551,11 @@ export async function startStudio(opts = {}) {
         return;
       }
       const url = new URL(req.url, contentOrigin);
-      if (url.pathname === "/_studio/bridge.js") {
+      if (["/_studio/bridge.js", "/_studio/text-model.js", "/_studio/text-editor.js"].includes(url.pathname)) {
         send(
           res,
           200,
-          await readFile(join(base, "public/bridge.js")),
+          await readFile(join(base, "public", url.pathname.split("/").at(-1))),
           "text/javascript",
         );
         return;
@@ -608,7 +608,7 @@ export async function startStudio(opts = {}) {
           .replace(/<head([^>]*)>/i, "<head$1>" + bootstrap)
           .replace(
             /<\/body>/i,
-            `<script id="sd-config" type="application/json">${enc(config)}</script><script src="/_studio/bridge.js"></script></body>`,
+            `<script id="sd-config" type="application/json">${enc(config)}</script><script src="/_studio/text-model.js"></script><script src="/_studio/text-editor.js"></script><script src="/_studio/bridge.js"></script></body>`,
           );
         send(res, 200, html, "text/html; charset=utf-8");
         return;

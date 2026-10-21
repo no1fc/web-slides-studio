@@ -16,6 +16,9 @@
   const patches = config.state?.patches || {};
   const added = new Map((config.state?.added || []).map((a) => [a.id, a]));
   const effective = (id) => ({ ...(added.get(id) || {}), ...(patches[id] || {}) });
+  const Text = globalThis.SDText, TextEditor = globalThis.SDTextEditor;
+  const textRanges = new WeakMap();
+  const pendingTextCommands = [];
   const displays = new Map();
   const editRequests = new Set();
   const activeTarget = (target) => {
@@ -123,6 +126,7 @@
         stage.style.transform = `scale(${innerWidth / 1920})`;
       }
     }
+    for (const el of slides[current]?.querySelectorAll('[data-sd-rich="true"]') || []) TextEditor.fit(el);
     tell("navigate", { index: current });
     report();
   }
@@ -164,10 +168,17 @@
       g = geometry(e),
       c = getComputedStyle(e),
       p = effective(e.dataset.sdId);
+    let textInfo = { textEditable: false };
+    if (TextEditor.eligible(e)) {
+      try {
+        const rich = TextEditor.model(e), range = textRanges.get(e) || null;
+        textInfo = { textEditable: true, textEditing: textEdit?.el === e, textStyle: TextEditor.styleAt(rich, range), textBox: TextEditor.box(e), textRange: range, textOverflowing: e.dataset.sdTextOverflowing === "true" };
+      } catch { /* Unsupported original text remains editable through HTML/CSS. */ }
+    }
     return {
         id: e.dataset.sdId,
         tag: e.tagName.toLowerCase(),
-        text: e.innerText || "",
+        text: textInfo.textEditable ? Text.plainText(TextEditor.model(e)) : e.innerText || "",
         src: e.getAttribute("src"),
         x: p.x ?? 0,
         y: p.y ?? 0,
@@ -181,6 +192,7 @@
         fontSize: p.fontSize || parseFloat(c.fontSize),
         color: hex(c.color),
         fill: hex(c.backgroundColor),
+        ...textInfo,
       };
   }
   function report() {
@@ -199,6 +211,7 @@
       finishNudge(true);
       lockAspect = false;
       if (textEdit && (next.length !== 1 || textEdit.el !== next[0])) finishText();
+      for (const e of selection) textRanges.delete(e);
     }
     for (const e of selection) e.classList.remove("sd-selected");
     selection = next;
@@ -235,6 +248,11 @@
         e.style.display = "none";
       } else e.style.display = displays.get(id) || "";
     }
+    if (p.richText) TextEditor.render(e, p.richText, q.textBox || TextEditor.box(e));
+    else if (p.textBox) {
+      const rich = q.richText || TextEditor.model(e);
+      TextEditor.render(e, rich, p.textBox);
+    } else if ((p.w || p.h) && e.dataset.sdRich === "true") TextEditor.fit(e);
   }
   function finishText() {
     if (!textEdit) return;
@@ -242,15 +260,65 @@
       textEdit.pending = true;
       return;
     }
-    const { el, before } = textEdit;
+    const { el, before, baseline } = textEdit;
+    const range = TextEditor.capture(el);
+    if (range) textRanges.set(el, range);
+    let rich;
+    try { rich = TextEditor.read(el); }
+    catch (error) { tell("notice", { message: error.message }); return; }
+    const changed = JSON.stringify(rich) !== baseline;
+    if (!changed) rich = before;
     textEdit = null;
-    const text = el.innerText;
+    const text = Text.plainText(rich);
     el.contentEditable = "false";
-    if (text !== before) {
-      patches[el.dataset.sdId] = { ...(patches[el.dataset.sdId] || {}), text };
-      tell("change", { id: el.dataset.sdId, patch: { text } });
+    TextEditor.render(el, rich, effective(el.dataset.sdId).textBox || TextEditor.box(el));
+    if (changed) {
+      const value = { text, richText: rich };
+      patches[el.dataset.sdId] = { ...(patches[el.dataset.sdId] || {}), ...value };
+      tell("change", { id: el.dataset.sdId, patch: value });
     }
     report();
+  }
+  function beginText(el) {
+    if (!TextEditor.eligible(el) || locked(el)) return;
+    const rich = TextEditor.model(el);
+    TextEditor.render(el, rich, effective(el.dataset.sdId).textBox || TextEditor.box(el));
+    textEdit = { el, before: rich, pending: false, baseline: null, nativeUndoDepth: 0, nativeAtBoundary: true, programmatic: false };
+    el.contentEditable = "true"; el.focus();
+    const end = Text.plainText(rich).length;
+    TextEditor.restore(el, textRanges.get(el) || { start: end, end });
+    // Read the rendered DOM: inherited styles and autofit can differ from the
+    // saved model without representing an actual native editing operation.
+    textEdit.baseline = JSON.stringify(TextEditor.read(el));
+    updateOverlay(); report();
+  }
+  function textCommand(d) {
+    if (composing) { pendingTextCommands.push(d); return; }
+    let failure;
+    try {
+      const target = selection.length === 1 && selected?.dataset.sdId === d.id ? selected : null;
+      if (!target || locked(target) || !TextEditor.eligible(target)) return;
+      if (textEdit) finishText();
+      const before = TextEditor.model(target), range = textRanges.get(target);
+      let rich = before, options = TextEditor.box(target);
+      if (d.type === "text-replace") {
+        if (typeof d.text !== "string" || d.text.length > 100000) throw new Error("텍스트는 100,000자 이내로 입력해 주세요.");
+        rich = TextEditor.replaceText(before, d.text); textRanges.delete(target);
+      } else if (d.scope === "box") options = Text.normalizeTextBox({ ...options, ...d.changes });
+      else if (["character", "paragraph"].includes(d.scope)) rich = Text.formatRichText(before, range && (d.scope === "paragraph" || range.end > range.start) ? range : null, d.scope, d.changes);
+      else return;
+      if (JSON.stringify(rich) === JSON.stringify(before) && JSON.stringify(options) === JSON.stringify(TextEditor.box(target))) return;
+      const value = { richText: rich, text: Text.plainText(rich), ...(d.scope === "box" ? { textBox: options } : {}) };
+      // Preserve legacy inspector values when a whole-object size/color command is used.
+      if (d.scope === "character" && (!range || range.start === range.end)) {
+        if (d.changes.fontSize) value.fontSize = d.changes.fontSize;
+        if (d.changes.color) value.color = d.changes.color;
+      }
+      patch(d.id, value); tell("change", { id: d.id, patch: value }); report();
+    } catch (error) { failure = error.message; tell("notice", { message: failure }); }
+    finally {
+      if (typeof d.requestId === "string" && d.requestId.length < 200) tell("text-command-result", { requestId: d.requestId, ...(failure ? { error: failure } : {}) });
+    }
   }
   function finishDrag(commit) {
     if (!drag) return;
@@ -389,6 +457,7 @@
     finishDrag(false);
     finishNudge(true);
     finishText();
+    while (pendingTextCommands.length) textCommand(pendingTextCommands.shift());
     for (const requestId of editRequests) tell("edit-settled", { requestId });
     editRequests.clear();
   }
@@ -472,7 +541,8 @@
       }
     }
     Object.assign(copy.style, { position: "relative", left: "auto", right: "auto", top: "auto", bottom: "auto", margin: "0", width: "100%", height: "100%", minWidth: "0", minHeight: "0", maxWidth: "none", maxHeight: "none", boxSizing: "border-box", transform: "none", transformOrigin: "center center", translate: "none", rotate: "none", scale: "none" });
-    return { kind: "html", html: copy.outerHTML, x: round((g.cx - slide.left) / ss - g.bw / 2), y: round((g.cy - slide.top) / ss - g.bh / 2), w: round(g.bw), h: round(g.bh), rotate: round(g.angle) };
+    const rich = source.dataset.sdRich === "true" ? TextEditor.resolve(source) : null;
+    return { kind: "html", html: copy.outerHTML, x: round((g.cx - slide.left) / ss - g.bw / 2), y: round((g.cy - slide.top) / ss - g.bh / 2), w: round(g.bw), h: round(g.bh), rotate: round(g.angle), ...(rich ? { richText: rich, textBox: TextEditor.box(source) } : {}) };
   }
   function command(name) {
     try {
@@ -512,13 +582,10 @@
       (e) => {
         if (formTarget(e.target) || e.target.isContentEditable) return;
         const target = activeTarget(e.target);
-        if (target && target.tagName !== "IMG" && !locked(target)) {
+        if (target && TextEditor.eligible(target) && !locked(target)) {
           e.preventDefault();
           select(target);
-          textEdit = { el: target, before: target.innerText, pending: false };
-          target.contentEditable = "true";
-          target.focus();
-          updateOverlay();
+          try { beginText(target); } catch (error) { tell("notice", { message: error.message }); }
         }
       },
       true,
@@ -534,6 +601,41 @@
     document.addEventListener("compositionend", () => {
       composing = false;
       if (textEdit?.pending || editRequests.size) queueMicrotask(settleEdits);
+    }, true);
+    document.addEventListener("selectionchange", () => {
+      if (!textEdit || composing) return;
+      const range = TextEditor.capture(textEdit.el);
+      if (range) { textRanges.set(textEdit.el, range); report(); }
+    });
+    document.addEventListener("input", e => {
+      if (!textEdit || !textEdit.el.contains(e.target)) return;
+      textEdit.nativeAtBoundary = false;
+      if (e.inputType === "historyUndo") {
+        textEdit.nativeUndoDepth++;
+        const boundary = textEdit.programmatic ? textEdit.nativeBaseline : textEdit.baseline;
+        try { textEdit.nativeAtBoundary = JSON.stringify(TextEditor.read(textEdit.el)) === boundary; } catch { /* Keep native undo for invalid input. */ }
+      } else if (e.inputType === "historyRedo") textEdit.nativeUndoDepth = Math.max(0, textEdit.nativeUndoDepth - 1);
+      else textEdit.nativeUndoDepth = 0;
+    }, true);
+    document.addEventListener("paste", e => {
+      if (!textEdit || !textEdit.el.contains(e.target) || composing) return;
+      e.preventDefault();
+      const value = (e.clipboardData?.getData("text/plain") || "").replace(/\r\n?/g, "\n");
+      if (!value) return;
+      const range = TextEditor.capture(textEdit.el);
+      if (!range) return;
+      try {
+        const rich = TextEditor.read(textEdit.el), plain = Text.plainText(rich);
+        const next = TextEditor.replaceText(rich, plain.slice(0, range.start) + value + plain.slice(range.end));
+        TextEditor.render(textEdit.el, next, TextEditor.box(textEdit.el));
+        TextEditor.restore(textEdit.el, { start: range.start + value.length, end: range.start + value.length });
+        // DOM replacement is outside browser history. Native typing after it
+        // can still undo back to this boundary before the app undoes the paste.
+        textEdit.programmatic = true;
+        textEdit.nativeBaseline = JSON.stringify(TextEditor.read(textEdit.el));
+        textEdit.nativeUndoDepth = 0;
+        textEdit.nativeAtBoundary = true;
+      } catch (error) { tell("notice", { message: error.message }); }
     }, true);
     document.addEventListener(
       "pointerdown",
@@ -559,6 +661,7 @@
         e.preventDefault();
         e.stopImmediatePropagation();
         finishNudge(true);
+        if (!textEdit) textRanges.delete(target);
         finishDrag(false);
         if (!handle && (e.shiftKey || e.ctrlKey || e.metaKey)) {
           setSelection(selection.includes(target) ? selection.filter(item => item !== target) : [...selection, target]);
@@ -627,6 +730,26 @@
       (e) => {
         if (e.isComposing || composing || e.keyCode === 229 || formTarget(e.target)) return;
         if (e.target.isContentEditable) {
+          if ((e.ctrlKey || e.metaKey) && ["z", "y"].includes(e.key.toLowerCase()) && textEdit) {
+            const redo = e.key.toLowerCase() === "y" || e.shiftKey;
+            let current;
+            try { current = JSON.stringify(TextEditor.read(textEdit.el)); } catch { /* Native undo can recover invalid input. */ }
+            const boundary = textEdit.programmatic ? textEdit.nativeBaseline : textEdit.baseline;
+            if (textEdit.nativeAtBoundary && current === boundary && (!redo || !textEdit.nativeUndoDepth)) {
+              e.preventDefault(); e.stopImmediatePropagation();
+              finishText();
+              if (!textEdit) tell(redo ? "redo" : "undo");
+              return;
+            }
+          }
+          if ((e.ctrlKey || e.metaKey) && ["b", "i", "u"].includes(e.key.toLowerCase()) && textEdit) {
+            e.preventDefault(); e.stopImmediatePropagation();
+            const target = textEdit.el, range = TextEditor.capture(target), key = { b: "bold", i: "italic", u: "underline" }[e.key.toLowerCase()];
+            if (range) textRanges.set(target, range);
+            const value = !TextEditor.styleAt(TextEditor.read(target), range)[key];
+            textCommand({ type: "text-format", id: target.dataset.sdId, scope: "character", changes: { [key]: value } });
+            beginText(target); return;
+          }
           if (e.key === "Escape") e.target.blur();
           return;
         }
@@ -638,10 +761,10 @@
           select(null);
           return;
         }
-        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
+        if ((e.ctrlKey || e.metaKey) && ["z", "y"].includes(e.key.toLowerCase())) {
           e.preventDefault();
           finishNudge(true);
-          tell(e.shiftKey ? "redo" : "undo");
+          tell(e.key.toLowerCase() === "y" || e.shiftKey ? "redo" : "undo");
         }
         const direction = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
         if (direction && selected && !drag && !e.ctrlKey && !e.metaKey && !e.altKey && !selection.some(locked)) {
@@ -694,12 +817,15 @@
     )
       return;
     const d = e.data;
+    if (d.editorSession && d.editorSession !== new URLSearchParams(location.search).get("editorSession")) return;
+    if (["text-format", "text-replace"].includes(d.type)) textCommand(d);
     if (d.type === "command" && typeof d.name === "string" && !composing) {
       settleEdits();
       command(d.name);
     }
     if (d.type === "select-ids" && Array.isArray(d.ids) && !composing) {
       settleEdits();
+      for (const item of selection) textRanges.delete(item);
       setSelection(editableElements().filter(e => d.ids.includes(e.dataset.sdId)));
     }
     if (d.type === "layer-toggle" && ["locked", "hidden"].includes(d.key) && typeof d.id === "string" && !composing) {
@@ -763,6 +889,13 @@
       }
       if (e.querySelector("img,[data-sd-id]")) continue;
       if (!e.innerText?.trim()) continue;
+      let richInfo = {};
+      if (TextEditor.eligible(e)) {
+        try {
+          const richText = TextEditor.resolve(e);
+          richInfo = { richText, textBox: TextEditor.box(e), fontScale: Number(e.dataset.sdFontScale) || 1, textOverflowing: e.dataset.sdTextOverflowing === "true", padding: Object.fromEntries(["top", "right", "bottom", "left"].map(side => [side, parseFloat(c["padding" + side[0].toUpperCase() + side.slice(1)]) || 0])) };
+        } catch { /* Preserve the legacy extraction for unsupported original text. */ }
+      }
       list.push({
         id: e.dataset.sdId,
         kind: "text",
@@ -776,6 +909,7 @@
         bold: parseInt(c.fontWeight) >= 600,
         align: ["center", "right"].includes(c.textAlign) ? c.textAlign : "left",
         rotate: parseFloat(c.rotate) || 0,
+        ...richInfo,
       });
     }
     return list;
@@ -808,6 +942,10 @@
       document.head.append(s);
     },
   };
+  document.fonts.ready.then(() => {
+    for (const el of document.querySelectorAll('[data-sd-rich="true"]')) TextEditor.fit(el);
+    if (edit) report();
+  });
   if (typeof window.goSlide !== "function") {
     addEventListener("resize", () => go(current));
     if (!edit)

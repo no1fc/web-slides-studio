@@ -215,6 +215,42 @@
               <label id="textField"
                 >내용<textarea id="textValue" rows="5"></textarea></label
               ><button id="replaceImageBtn" hidden>이미지 교체</button>
+              <p id="textUnavailableNote" class="tool-help" hidden>이미지나 다른 개체가 포함된 묶음은 내용과 글자 서식을 직접 바꿀 수 없습니다. 안쪽 텍스트 개체를 선택하세요.</p>
+              <section id="textTools" class="text-tools" aria-label="텍스트 서식" hidden>
+                <div class="panel-heading"><h3>텍스트 서식</h3></div>
+                <p id="textRangeLabel" class="tool-help" aria-live="polite">전체 텍스트에 적용</p>
+                <label>글꼴<input id="fontFamilyValue" type="text" maxlength="100" list="fontFamilies" placeholder="글꼴 이름" /></label>
+                <datalist id="fontFamilies"><option value="Arial"></option><option value="Noto Sans KR"></option><option value="Pretendard"></option><option value="맑은 고딕"></option><option value="Georgia"></option></datalist>
+                <div class="prop-grid">
+                  <label>글자 크기<input id="fontValue" type="number" min="6" max="400" step="any" /></label>
+                  <label>글자 색<input id="colorValue" type="color" /></label>
+                </div>
+                <div class="text-emphasis" role="group" aria-label="문자 강조">
+                  <button id="boldTextBtn" type="button" aria-pressed="false" title="굵게">굵게</button>
+                  <button id="italicTextBtn" type="button" aria-pressed="false" title="기울임">기울임</button>
+                  <button id="underlineTextBtn" type="button" aria-pressed="false" title="밑줄">밑줄</button>
+                </div>
+                <details class="text-section" open>
+                  <summary>문단</summary>
+                  <label>문단 정렬<select id="textAlignValue"><option value="left">왼쪽</option><option value="center">가운데</option><option value="right">오른쪽</option><option value="justify">양쪽</option></select></label>
+                  <div class="prop-grid">
+                    <label>줄간격 배수<input id="lineHeightValue" type="number" min="0.5" max="4" step="any" /></label>
+                    <label>문단 뒤 간격 px<input id="spaceAfterValue" type="number" min="0" max="200" step="any" /></label>
+                  </div>
+                  <div class="text-indent" role="group" aria-label="문단 들여쓰기">
+                    <button id="outdentTextBtn" type="button" title="들여쓰기 줄이기">← 내어쓰기</button>
+                    <button id="indentTextBtn" type="button" title="들여쓰기 늘리기">들여쓰기 →</button>
+                  </div>
+                  <label>목록<select id="listStyleValue"><option value="none">없음</option><option value="bullet">글머리표</option><option value="number">번호</option></select></label>
+                </details>
+                <details class="text-section">
+                  <summary>텍스트 상자</summary>
+                  <label>세로 정렬<select id="verticalAlignValue"><option value="top">위</option><option value="middle">가운데</option><option value="bottom">아래</option></select></label>
+                  <label>넘치는 내용<select id="textOverflowValue"><option value="visible">표시</option><option value="clip">자르기</option></select></label>
+                  <label>자동 맞춤<select id="textAutoFitValue"><option value="none">사용 안 함</option><option value="shrink">상자 안으로 글자 축소</option></select></label>
+                </details>
+                <p id="textOverflowNote" class="text-overflow-note" role="status" hidden>텍스트가 상자를 넘칩니다. 상자를 키우거나 글자 크기·간격을 줄여 주세요.</p>
+              </section>
               <div class="prop-grid">
                 <label
                   >가로 이동<input
@@ -250,19 +286,11 @@
                     type="number"
                     step="any"
                     min="-360"
-                    max="360" /></label
-                ><label
-                  >글자 크기<input
-                    id="fontValue"
-                    type="number"
-                    min="6"
-                    max="400"
-                /></label>
+                    max="360" /></label>
               </div>
               <label class="switch-row"><span>크기 비율 유지</span><input id="lockAspect" type="checkbox" /></label>
               <div class="prop-grid">
-                <label>글자 색<input id="colorValue" type="color" /></label
-                ><label>배경 색<input id="fillValue" type="color" /></label>
+                <label>배경 색<input id="fillValue" type="color" /></label>
               </div>
               <button id="removeElementBtn" class="danger-text">
                 선택한 요소 숨기기

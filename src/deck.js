@@ -1,5 +1,7 @@
 import { parseHTML } from "linkedom";
 import { record, normalizeCode, codeIds, renderAuthoring } from "./authoring.js";
+import "../public/text-model.js";
+const { normalizeRichText, normalizeTextBox, renderRichText } = globalThis.SDText;
 const tags = "h1,h2,h3,h4,p,li,td,th,img,blockquote,figcaption,code,span,div";
 const num = (x, min, max) =>
   typeof x === "number" && Number.isFinite(x) && x >= min && x <= max;
@@ -65,9 +67,15 @@ export function migrateState(raw) {
   if (raw.schemaVersion !== undefined && raw.schemaVersion !== 1) throw new Error("지원하지 않는 편집 데이터 버전입니다.");
   if (Object.hasOwn(raw, "patches")) {
     record(raw.patches, "수정 데이터");
-    for (const patch of Object.values(raw.patches)) record(patch, "수정 항목");
+    for (const patch of Object.values(raw.patches)) {
+      record(patch, "수정 항목");
+      validateTextFields(patch);
+    }
   }
-  if (Array.isArray(raw.added)) for (const added of raw.added) record(added, "추가 요소");
+  if (Array.isArray(raw.added)) for (const added of raw.added) {
+    record(added, "추가 요소");
+    validateTextFields(added);
+  }
   const state = structuredClone(raw);
   state.schemaVersion = 1;
   for (const key of ["clones", "scenes", "slideCode", "masters", "slideMasters"]) {
@@ -78,6 +86,8 @@ export function migrateState(raw) {
 }
 const patchKeys = new Set([
   "text",
+  "richText",
+  "textBox",
   "src",
   "x",
   "y",
@@ -92,11 +102,17 @@ const patchKeys = new Set([
   "z",
   "layerPosition",
 ]);
+function validateTextFields(patch) {
+  if (Object.hasOwn(patch, "richText")) normalizeRichText(patch.richText);
+  if (Object.hasOwn(patch, "textBox")) normalizeTextBox(patch.textBox);
+}
 function validPatch(p) {
   record(p, "편집 데이터");
   for (const [k, v] of Object.entries(p)) {
     if (!patchKeys.has(k)) throw new Error("허용되지 않는 편집 항목입니다.");
-    if (k === "text" && (typeof v !== "string" || v.length > 20000))
+    if (k === "richText") p.richText = normalizeRichText(v);
+    if (k === "textBox") p.textBox = normalizeTextBox(v);
+    if (k === "text" && (typeof v !== "string" || v.length > (Object.hasOwn(p, "richText") ? 100000 : 20000)))
       throw new Error("텍스트가 너무 깁니다.");
     if (
       k === "src" &&
@@ -186,6 +202,7 @@ export function validateState(raw, deck) {
       }
     } else if (Object.hasOwn(a, "html")) throw new Error("HTML은 복제 개체에서만 사용할 수 있습니다.");
     validPatch(p);
+    Object.assign(a, p);
   }
   if (
     !state.patches ||
@@ -222,7 +239,11 @@ export function validateState(raw, deck) {
   };
 }
 export function applyPatch(e, p) {
-  if (p.text !== undefined) e.textContent = p.text;
+  if (p.text !== undefined && p.richText === undefined) {
+    e.textContent = p.text;
+    e.removeAttribute("data-sd-rich");
+    e.removeAttribute("data-sd-rich-text");
+  }
   if (p.src) e.setAttribute("src", p.src);
   if (p.x !== undefined || p.y !== undefined)
     e.style.setProperty("translate", `${p.x || 0}px ${p.y || 0}px`);
@@ -235,6 +256,7 @@ export function applyPatch(e, p) {
     e.style.webkitTextFillColor = p.color;
   }
   if (p.fill) e.style.background = p.fill;
+  if (p.richText !== undefined || p.textBox !== undefined) renderRichText(e, p.richText, p.textBox);
   if (p.layerPosition === "relative") {
     e.style.position = "relative";
     for (const property of ["inset", "left", "top", "right", "bottom"])
@@ -243,7 +265,12 @@ export function applyPatch(e, p) {
   if (p.z !== undefined) e.style.zIndex = String(p.z);
   if (p.hidden !== undefined) {
     if (p.hidden) e.style.display = "none";
-    else e.style.removeProperty("display");
+    else {
+      let vertical;
+      try { vertical = normalizeTextBox(JSON.parse(e.getAttribute("data-sd-text-box"))).vertical; } catch { /* Legacy markup can carry unrelated attributes. */ }
+      if (vertical !== undefined) e.style.display = "flex";
+      else e.style.removeProperty("display");
+    }
   }
 }
 export function renderDeck(html, state) {

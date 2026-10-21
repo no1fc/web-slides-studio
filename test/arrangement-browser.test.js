@@ -181,8 +181,10 @@ test("a duplicated title retains editable font and color through reload and repe
   await page.waitForFunction(() => document.querySelector("#fontValue").value === "42");
   await page.locator("#fontValue").fill("64"); await page.locator("#fontValue").dispatchEvent("change");
   await page.locator("#colorValue").fill("#aa2233"); await page.locator("#colorValue").dispatchEvent("change");
-  assert.equal(await copy.locator("strong").evaluate(e => getComputedStyle(e).fontSize), "64px");
-  assert.equal(await copy.locator("strong").evaluate(e => getComputedStyle(e).color), "rgb(170, 34, 51)");
+  await saved(page);
+  const emphasis = copy.locator("[data-sd-run]").filter({ hasText: "제목" });
+  assert.equal(await emphasis.evaluate(e => getComputedStyle(e).fontSize), "64px");
+  assert.equal(await emphasis.evaluate(e => getComputedStyle(e).color), "rgb(170, 34, 51)");
   await page.locator("#textValue").fill("새 제목"); await page.locator("#textValue").dispatchEvent("change");
   assert.equal(await copy.evaluate(e => getComputedStyle(e).fontSize), "64px");
   await saved(page); await page.reload(); await copy.waitFor();

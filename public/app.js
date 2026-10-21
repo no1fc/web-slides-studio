@@ -42,6 +42,9 @@ $("lockAspect").onchange = () => post("settings", { lockAspect: $("lockAspect").
 let frameReady = false;
 let editorSession = null, pendingSelection = [], objectWork = Promise.resolve(), objectBusy = false;
 const pendingEdits = new Map();
+const pendingTextCommands = new Map();
+let textBusy = false;
+let transitionBusy = false;
 const clone = (x) => JSON.parse(JSON.stringify(x));
 const uid = (p) => p + "-" + crypto.randomUUID();
 function toast(text) {
@@ -104,6 +107,26 @@ async function settleEditing() {
     post("commit-edit", { requestId });
   });
   await objectWork;
+}
+function transitionTools() {
+  for (const id of ["sceneValue", "backgroundValue", "undoBtn", "redoBtn"]) $(id).disabled = transitionBusy;
+  $("slideList").querySelectorAll("button").forEach(button => { button.disabled = transitionBusy; });
+}
+function transitionAction(fn, processingStatus) {
+  return (...args) => {
+    if (!deck || transitionBusy) return;
+    const context = objectContext(), previousStatus = $("saveStatus").textContent;
+    transitionBusy = true;
+    transitionTools();
+    $("saveStatus").textContent = processingStatus;
+    return action(() => {
+      if (currentObjectContext(context)) return fn(...args);
+    })().finally(() => {
+      transitionBusy = false;
+      transitionTools();
+      if ($("saveStatus").textContent === processingStatus) $("saveStatus").textContent = previousStatus;
+    });
+  };
 }
 function dialog(title) {
   $("dialog").classList.remove("files-dialog");
@@ -286,6 +309,9 @@ async function history(back) {
   renderSlides();
   refreshFrame();
 }
+function performHistory(back) {
+  return transitionAction(() => history(back), back ? "실행 취소 중…" : "다시 실행 중…")();
+}
 function properties() {
   const s = selected;
   $("noSelection").hidden = !!s;
@@ -296,7 +322,8 @@ function properties() {
   $("selectionHelp").textContent = selectedElements.length > 1
     ? "여러 개체를 함께 이동·정렬할 수 있습니다. 크기와 내용을 바꾸려면 하나만 선택하세요."
     : "슬라이드 또는 레이어 목록에서 개체를 선택하세요.";
-  $("properties").querySelectorAll("input,textarea,button,select").forEach(control => { control.disabled = !!s && objectLocked(s.id); });
+  $("properties").querySelectorAll("input,textarea,button,select").forEach(control => { control.disabled = !s || objectLocked(s.id); });
+  textProperties();
   arrangementTools();
   if (!s) return;
   $("precisionNote").textContent = objectLocked(s.id) ? "잠긴 개체입니다. 레이어 목록에서 잠금을 해제하세요." : s.precisionReason || "";
@@ -310,11 +337,71 @@ function properties() {
     ["wValue", "w"],
     ["hValue", "h"],
     ["rotateValue", "rotate"],
-    ["fontValue", "fontSize"],
-    ["colorValue", "color"],
     ["fillValue", "fill"],
   ])
     $(id).value = s[key] ?? 0;
+}
+function editableText(allowBusy = false) {
+  return !!selected && selectedElements.length === 1 && selected.textEditable === true &&
+    frameReady && !objectBusy && (allowBusy || !textBusy) && activeElement(selected.id) && !objectLocked(selected.id);
+}
+function textProperties() {
+  for (const pending of pendingTextCommands.values())
+    if (!currentObjectContext(pending.context) || selected?.id !== pending.id) pending.finish();
+  const s = selected, enabled = editableText();
+  $("textTools").hidden = s?.textEditable !== true;
+  $("textUnavailableNote").hidden = !s || s.tag === "img" || s.textEditable !== false;
+  $("textValue").disabled = !enabled;
+  $("textTools").querySelectorAll("input,select,button").forEach(control => { control.disabled = !enabled; });
+  if (!s || s.textEditable !== true) return;
+  const style = s.textStyle || {}, box = s.textBox || {};
+  for (const [id, value] of [
+    ["fontFamilyValue", style.fontFamily ?? ""], ["fontValue", style.fontSize ?? s.fontSize ?? ""],
+    ["colorValue", style.color ?? s.color ?? "#000000"], ["textAlignValue", style.align ?? "left"],
+    ["lineHeightValue", style.lineHeight ?? 1.2], ["spaceAfterValue", style.spaceAfter ?? 0],
+    ["listStyleValue", style.list ?? "none"], ["verticalAlignValue", box.vertical ?? "top"],
+    ["textOverflowValue", box.overflow ?? "visible"], ["textAutoFitValue", box.autoFit ?? "none"],
+  ]) $(id).value = value;
+  for (const [id, key] of [["boldTextBtn", "bold"], ["italicTextBtn", "italic"], ["underlineTextBtn", "underline"]])
+    $(id).setAttribute("aria-pressed", style[key] === null ? "mixed" : String(style[key] === true));
+  const indent = style.indent ?? 0;
+  $("outdentTextBtn").disabled = !enabled || indent <= 0;
+  $("indentTextBtn").disabled = !enabled || indent >= 8;
+  $("textRangeLabel").textContent = s.textRange
+    ? s.textRange.start !== s.textRange.end ? "선택한 문자와 문단에 적용" : "선택한 글자가 없으면 전체 텍스트에 문자 서식을 적용합니다. 문단 서식은 현재 문단에 적용합니다."
+    : "전체 텍스트에 적용";
+  $("textOverflowNote").hidden = !s.textOverflowing;
+}
+function textCommand(type, data) {
+  if (!editableText()) return;
+  // Commit can refresh the inspector or finish an IME composition. Keep the original
+  // target and values, and discard the command if the user changes its context.
+  const id = selected.id, context = objectContext();
+  const previousStatus = $("saveStatus").textContent, processingStatus = "서식 적용 중…";
+  textBusy = true;
+  textProperties();
+  $("saveStatus").textContent = processingStatus;
+  return action(async () => {
+    if (!currentObjectContext(context) || selected?.id !== id || !editableText(true)) return;
+    const requestId = crypto.randomUUID();
+    await new Promise((resolve, reject) => {
+      const finish = error => {
+        clearTimeout(timer);
+        pendingTextCommands.delete(requestId);
+        error ? reject(new Error(error)) : resolve();
+      };
+      const timer = setTimeout(() => finish("서식 적용 결과를 확인하지 못했습니다. 잠시 후 다시 시도해 주세요."), 3000);
+      pendingTextCommands.set(requestId, { id, context, finish });
+      post(type, { id, requestId, ...data });
+    });
+  })().finally(() => {
+    textBusy = false;
+    properties();
+    if ($("saveStatus").textContent === processingStatus) $("saveStatus").textContent = previousStatus;
+  });
+}
+function textFormat(scope, changes) {
+  return textCommand("text-format", { scope, changes });
 }
 function objectLocked(id) {
   return !!(state?.patches[id]?.locked || layerItems.find(item => item.id === id)?.locked || selectedElements.find(item => item.id === id)?.locked);
@@ -503,14 +590,14 @@ function renderSlides() {
       el("span", String(i + 1).padStart(2, "0")),
       el("div", slideTitle(id)),
     );
-    b.onclick = action(() => {
+    b.onclick = transitionAction(() => {
       clearSelection();
       layerItems = [];
       index = i;
       post("go", { index });
       renderSlides();
       renderLayers();
-    });
+    }, "슬라이드 이동 중…");
     list.append(b);
   });
   $("slideLabel").textContent = `${index + 1} / ${state.order.length}`;
@@ -524,6 +611,7 @@ function renderSlides() {
     scene.append(o);
   }
   scene.value = state.scenes[state.order[index]] || "";
+  transitionTools();
 }
 window.addEventListener("message", (e) => {
   if (
@@ -544,6 +632,10 @@ window.addEventListener("message", (e) => {
   if (d.type === "edit-settled") {
     pendingEdits.get(d.requestId)?.();
     pendingEdits.delete(d.requestId);
+    return;
+  }
+  if (d.type === "text-command-result") {
+    pendingTextCommands.get(d.requestId)?.finish(typeof d.error === "string" ? d.error : undefined);
     return;
   }
   if (d.type === "select") {
@@ -590,7 +682,7 @@ window.addEventListener("message", (e) => {
     arrangementTools();
   }
   if (d.type === "undo" || d.type === "redo")
-    action(() => history(d.type === "undo"))();
+    performHistory(d.type === "undo");
 });
 async function openDeck(id) {
   if (deck) await flush();
@@ -809,14 +901,13 @@ $("deckTitle").onchange = action(async () => {
   await api("/decks/" + deck.id, "PATCH", { title });
   deck.title = title;
 });
-$("textValue").onchange = () => patch({ text: $("textValue").value });
+$("textValue").onchange = () => textCommand("text-replace", { text: $("textValue").value });
 for (const [id, key] of [
   ["xValue", "x"],
   ["yValue", "y"],
   ["wValue", "w"],
   ["hValue", "h"],
   ["rotateValue", "rotate"],
-  ["fontValue", "fontSize"],
 ])
   $(id).onchange = () => {
     const v = Number($(id).value);
@@ -833,11 +924,37 @@ for (const [id, key] of [
     }
     else toast("입력 범위를 확인해 주세요.");
   };
-$("colorValue").onchange = () => patch({ color: $("colorValue").value });
+for (const [id, scope, key] of [
+  ["fontValue", "character", "fontSize"], ["lineHeightValue", "paragraph", "lineHeight"],
+  ["spaceAfterValue", "paragraph", "spaceAfter"],
+]) $(id).onchange = () => {
+  if (!editableText()) return;
+  const control = $(id), value = control.value;
+  if (value === "" || !control.checkValidity()) { toast("입력 범위를 확인해 주세요."); return; }
+  textFormat(scope, { [key]: Number(value) });
+};
+$("fontFamilyValue").onchange = () => {
+  const value = $("fontFamilyValue").value.trim();
+  if (!value || !$("fontFamilyValue").checkValidity()) { if (editableText()) toast("글꼴 이름을 입력해 주세요."); return; }
+  textFormat("character", { fontFamily: value });
+};
+$("colorValue").onchange = () => textFormat("character", { color: $("colorValue").value });
+for (const [id, key] of [["boldTextBtn", "bold"], ["italicTextBtn", "italic"], ["underlineTextBtn", "underline"]])
+  $(id).onclick = () => textFormat("character", { [key]: selected?.textStyle?.[key] !== true });
+for (const [id, scope, key] of [
+  ["textAlignValue", "paragraph", "align"], ["listStyleValue", "paragraph", "list"],
+  ["verticalAlignValue", "box", "vertical"], ["textOverflowValue", "box", "overflow"],
+  ["textAutoFitValue", "box", "autoFit"],
+]) $(id).onchange = () => textFormat(scope, { [key]: $(id).value });
+for (const [id, delta] of [["outdentTextBtn", -1], ["indentTextBtn", 1]])
+  $(id).onclick = () => {
+    if ($(id).disabled) return;
+    textFormat("paragraph", { indent: Math.max(0, Math.min(8, (selected?.textStyle?.indent ?? 0) + delta)) });
+  };
 $("fillValue").onchange = () => patch({ fill: $("fillValue").value });
 $("removeElementBtn").onclick = () => patch({ hidden: true });
-$("undoBtn").onclick = action(() => history(true));
-$("redoBtn").onclick = action(() => history(false));
+$("undoBtn").onclick = () => performHistory(true);
+$("redoBtn").onclick = () => performHistory(false);
 $("addSlideBtn").onclick = action(() =>
   structural(() => {
     const id = uid("s");
@@ -956,6 +1073,7 @@ $("backgroundValue").onchange = (e) => {
   return action(() => structural(() => (state.background = checked)))();
 };
 $("sceneValue").onchange = (e) => {
+  if (transitionBusy) return;
   const value = e.target.value, slide = state.order[index];
   return action(() => structural(() => {
     if (value) state.scenes[slide] = value;
@@ -1266,7 +1384,7 @@ document.addEventListener("keydown", (e) => {
   if (!deck || e.isComposing || e.target.isContentEditable || /INPUT|TEXTAREA|SELECT/.test(e.target.tagName) || $("dialog").open) return;
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
     e.preventDefault();
-    action(() => history(!e.shiftKey))();
+    performHistory(!e.shiftKey);
   } else if ((e.ctrlKey || e.metaKey) && !e.altKey) {
     const name = { d: "duplicate", c: "copy", v: "paste", a: "select-all" }[e.key.toLowerCase()];
     if (!name) return;

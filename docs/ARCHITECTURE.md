@@ -26,10 +26,13 @@ flowchart LR
 | `src/auth.js` | 암호 해시 저장, 검증, 인증 변경 직렬화 |
 | `src/files.js` | 자산 열거·용량·참조 조사·웹 원본 ZIP |
 | `src/server.js` | 인증·Origin/Host·API·콘텐츠·출력 작업 관리 |
-| `src/export.js` | Chromium 캡처, HTML/PDF/PPTX 생성 |
+| `src/export.js` | Chromium 캡처, HTML/PDF/PPTX 생성, 오프라인 스크립트 포함 |
+| `src/text-export.js` | richText의 PPTX run·문단 매핑, 표시 배율·목록·XML 문단 속성 보존 |
 | `public/app.js` | 자료실·편집 UI·일괄 history·자동 저장·레이어·앱 내부 복사·파일 관리·암호 변경 |
 | `public/authoring-ui.js` | HTML/CSS·JSON·마스터 편집창과 검증·초안 보존 |
-| `public/bridge.js` | 콘텐츠 iframe의 DOM 선택·기하 계산·정밀 조작·배치·복제 스냅샷·발표·출력 연결 |
+| `public/bridge.js` | 콘텐츠 iframe의 DOM 선택·기하 계산·정밀 조작·배치·복제 스냅샷·발표·텍스트 명령·출력 연결 |
+| `public/text-model.js` | 서버·브라우저 공용 richText/textBox 검증, 문자 범위 서식, 안전한 DOM 렌더링 |
+| `public/text-editor.js` | 브라우저 DOM 읽기, 문자 선택 보존·복원, 실제 표시 자동 맞춤 |
 
 ## 편집과 revision
 
@@ -37,11 +40,60 @@ flowchart LR
 
 복원은 선택한 과거 상태를 현재 기준 revision 위에 새 버전으로 저장합니다. 공유 링크는 게시한 revision에 고정되며 다시 게시할 때만 최신 내용으로 바뀝니다.
 
-상태는 `schemaVersion: 1`을 사용합니다. 과거 상태를 읽을 때 빠진 코드·마스터 필드를 보완하며 과거 revision 파일을 덮어쓰지 않습니다. `slideCode`에는 슬라이드별 HTML/CSS, `masters`에는 공통 구성, `slideMasters`에는 연결을 저장합니다. `patches`에는 기존 위치·크기·내용에 더해 `locked`, `z`, `layerPosition`을 저장할 수 있으며, 독립 HTML 복제 개체는 `added`에 포함됩니다. 알 수 없는 필드와 지원하지 않는 버전은 거절합니다.
+상태는 `schemaVersion: 1`을 사용합니다. 과거 상태를 읽을 때 빠진 코드·마스터 필드를 보완하며 과거 revision 파일을 덮어쓰지 않습니다. `slideCode`에는 슬라이드별 HTML/CSS, `masters`에는 공통 구성, `slideMasters`에는 연결을 저장합니다. `patches`에는 기존 위치·크기·내용에 더해 `locked`, `z`, `layerPosition`, `richText`, `textBox`를 저장할 수 있으며, 독립 HTML 복제 개체는 `added`에 포함됩니다. 알 수 없는 필드와 지원하지 않는 버전은 거절합니다.
 
 브라우저의 bridge는 실제 DOM의 선택과 좌표를 계산하고 일괄 변경을 부모 UI에 전달합니다. 부모는 명령 단위로 검증·history·저장을 처리합니다. 다중 조작 하나는 Undo 한 번에 대응하며, 드래그 취소는 선택 개체 전체를 되돌립니다. 복제·붙여넣기는 새 개체 ID와 독립 상태를 만들고 같은 자료 안의 앱 내부 복사 기능을 사용합니다.
 
 레이어 순서는 같은 DOM 부모의 편집 개체 사이에 적용합니다. 다른 부모의 CSS stacking context를 평탄화하지 않습니다. `locked`는 편집 조작 보호이며 인증·접근 권한 제어가 아닙니다. 코드·JSON의 명시적 변경은 별도로 검증합니다.
+
+## 구조화된 텍스트
+
+`schemaVersion: 1`을 하위 호환 확장합니다. 기존 `text`만 있는 상태도 읽으며, 같은 개체에 `text`와 `richText`가 있으면 `richText`의 내용이 우선합니다. 새 서식은 `patches` 또는 `added` 개체에 저장합니다. 서버와 브라우저가 같은 classic script `public/text-model.js`의 `globalThis.SDText`를 사용합니다. Node는 이 파일을 side-effect import합니다.
+
+다음은 JSON 편집 상태 안의 `patches.e0`에 넣는 예시입니다. 실제 문서에 존재하는 ID를 사용하고, 전체 상태의 `order`·`added`·코드·마스터 등 다른 필드는 유지합니다.
+
+```json
+{
+  "richText": {
+    "paragraphs": [
+      {
+        "runs": [
+          { "text": "중요: ", "fontFamily": "Noto Sans KR", "fontSize": 40, "color": "#cc3300", "bold": true },
+          { "text": "첫 항목", "fontSize": 32, "italic": true, "underline": true }
+        ],
+        "align": "left",
+        "lineHeight": 1.5,
+        "spaceAfter": 12,
+        "indent": 1,
+        "list": "bullet"
+      },
+      {
+        "runs": [{ "text": "다음 문단", "fontSize": 32 }],
+        "align": "justify",
+        "lineHeight": 1.2,
+        "spaceAfter": 0,
+        "indent": 0,
+        "list": "none"
+      }
+    ]
+  },
+  "textBox": { "vertical": "middle", "overflow": "clip", "autoFit": "shrink" }
+}
+```
+
+문자 스타일은 선택 필드이며 생략하면 원본의 상속 스타일을 사용합니다. 크기는 6~400px, 색은 `#RRGGBB`, 글꼴 이름은 허용된 문자로 구성한 100자 이하 문자열, `bold`·`italic`·`underline`은 boolean입니다. 문단은 `align: left|center|right|justify`, `lineHeight: 0.5~4`, `spaceAfter: 0~200px`, `indent: 0~8` 정수, `list: none|bullet|number`를 받습니다. 들여쓰기 한 단계는 32px이고 목록 표식 영역은 24px입니다. 번호 카운터는 들여쓰기 깊이별로 관리하며 같은 깊이의 일반 문단·글머리표에서 재시작합니다.
+
+`textBox`는 `vertical: top|middle|bottom`, `overflow: visible|clip`, `autoFit: none|shrink`를 지원합니다. 원래 크기·간격은 논리 문서 px로 저장합니다. 자동 축소의 `fontScale`은 표시 결과이며 저장 스키마에 넣지 않습니다. 브라우저는 글자·문단 뒤 간격·들여쓰기·목록 여백을 함께 축소하고 최소 표시 글자 크기 6px 아래로 줄이지 않습니다. 상자 크기는 유지하며, 맞지 않는 내용은 넘침 상태로 보고합니다.
+
+richText 하나는 최대 500문단·5,000 run·100,000 UTF-16 단위의 문자(문단 사이 개행 포함)를 허용합니다. 전체 상태는 기존 직렬화 길이 2,000,000 제한을 유지합니다. unknown/inherited/accessor 필드와 비정상 배열을 거절하며 입력 문자열을 HTML로 해석하지 않습니다. DOM은 `[data-sd-text-content]` 아래 문단·run span의 `textContent`로 렌더링하며 목록 표식은 문자 선택 offset에서 제외합니다. 원본의 이미지·표·다른 편집 ID를 포함한 복합 컨테이너는 텍스트 도구 대상으로 변환하지 않습니다.
+
+### 브라우저 명령과 저장
+
+부모가 `commit-edit` 완료를 기다린 다음 `text-format {id,scope,changes}` 또는 `text-replace {id,text}`를 보냅니다. scope는 `character`, `paragraph`, `box`입니다. bridge는 대상 ID·슬라이드·편집 세션·잠금과 지원 여부를 다시 확인하고 `change {id,patch:{richText,text,textBox?}}`로 결과를 돌려줍니다. 부모는 기존 history·저장·revision 충돌 처리를 사용하므로 서식 명령 한 번이 Undo 한 번입니다.
+
+문자 선택은 문단 사이 개행을 포함한 UTF-16 start/end 범위로 보관합니다. 문자 명령은 비어 있지 않은 선택 범위에 적용하고 커서만 있으면 전체 문자에 적용합니다. 문단 명령은 선택 범위가 걸친 문단, 또는 커서가 있는 문단에 적용하며 개체 선택만 있으면 모든 문단에 적용합니다. 상자 명령은 항상 개체 전체에 적용합니다. IME 조합 중 명령은 확정 뒤 실행하며, 직접 입력 중 외부 붙여넣기는 평문으로 처리합니다.
+
+저장·재열기·개체 및 슬라이드 복제·버전 복원에는 동일한 모델이 사용됩니다. HTML/CSS·JSON·마스터와 기존 배치·레이어 상태도 같은 revision에 유지합니다. 과거 코드의 validator는 새 필드를 알지 못하므로 배포 롤백 시 코드와 데이터의 호환성을 함께 확인해야 합니다.
 
 ## 관리 API
 
@@ -85,7 +137,13 @@ flowchart LR
 
 콘텐츠 서버는 자료 ID와 임의 토큰을 확인합니다. 비공개 미리보기와 공개 게시용 토큰을 구분합니다. 휴지통 자료와 철회된 링크는 읽을 수 없습니다. iframe·CSP·postMessage 출처 검사를 통해 관리 기능을 분리합니다.
 
-출력기는 서버 내부 loopback 콘텐츠 URL을 읽습니다. 외부 HTTP 통신을 차단한 컨테이너에서도 동작하며, HTML/PDF/PPTX는 요청 당시의 저장 상태를 사용합니다. PDF와 외형 보존 PPTX는 슬라이드 캡처이고, 편집 가능 PPTX는 지원 요소를 별도로 추출합니다.
+출력기는 서버 내부 loopback 콘텐츠 URL을 읽습니다. 외부 HTTP 통신을 차단한 컨테이너에서도 동작하며, HTML/PDF/PPTX는 요청 당시의 저장 상태를 사용합니다. 콘텐츠 서버는 `/_studio/text-model.js` → `/_studio/text-editor.js` → `/_studio/bridge.js` 순서로 classic script를 넣습니다. 출력기의 요청 허용 목록에는 해당 세 경로와 자료 자산의 GET만 포함합니다. HTML ZIP에는 같은 순서로 `assets/studio-text-model.js`, `assets/studio-text-editor.js`, `assets/studio-viewer.js`를 포함합니다.
+
+PDF와 외형 보존 PPTX는 슬라이드 캡처이고, 편집 가능 PPTX는 지원 요소를 별도로 추출합니다. `collect()`의 텍스트에는 기존 좌표 외에 richText·textBox·표시 fontScale·padding·textOverflowing이 들어갑니다. 저장한 문단·run 구조를 유지하면서 생략된 서식은 실제 DOM의 computed style로 보완해 출력합니다. PPTX는 표시 배율을 반영한 문자 크기·문단 뒤 간격·들여쓰기·목록 여백과 원래 상자·회전을 사용하며 PowerPoint의 추가 자동 축소를 걸지 않습니다. 1920×1080 문서를 13⅓×7.5인치 슬라이드로 옮기므로 CSS px는 0.5pt에 대응합니다.
+
+`src/text-export.js`는 글꼴·크기·색·굵게·기울임·밑줄을 run으로, 정렬·줄간격·간격·들여쓰기·목록을 문단 속성으로 기록합니다. PptxGenJS 4.0.1의 중복 문단 속성 및 일반 문단 들여쓰기 문제를 생성한 native 텍스트 상자에 한정한 XML 보정으로 처리합니다. 문단 내부 개행은 soft break로 남기고 글꼴 이름을 XML 속성으로 escape합니다.
+
+`overflow: clip`이고 실제로 넘치는 텍스트는 화면에 보이는 자르기를 보존하기 위해 배경 이미지로 남깁니다. 지원하지 않는 복합 HTML·CSS 장식·3D도 이미지에 포함됩니다. 자동 검증은 PPTX XML 모델 보존을 확인하며 실제 PowerPoint의 글꼴 대체·줄바꿈·렌더링 동등성을 보장하지 않습니다. Linux Chromium과 설치 글꼴의 결과는 배포 환경에서 별도로 확인합니다.
 
 ## 파일 삭제의 보호 범위
 

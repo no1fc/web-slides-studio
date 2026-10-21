@@ -546,6 +546,21 @@ p {
   height: 33px;
   padding: 3px;
 }
+.text-tools { border-bottom: 1px solid var(--border); margin: 18px 0; padding-bottom: 16px; }
+.text-tools .prop-grid { margin: 12px 0; }
+.text-tools input, .text-tools select { min-width: 0; font-size: 12px; padding: 8px; }
+.text-emphasis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+.text-emphasis button, .text-indent button { padding: 8px 4px; font-size: 11px; }
+.text-emphasis button[aria-pressed="true"] { background: #e8f3f0; color: #07695f; border-color: #72beb9; }
+.text-emphasis button[aria-pressed="mixed"] { background: #f2f5f4; border-style: dashed; }
+#boldTextBtn { font-weight: 800; }
+#italicTextBtn { font-style: italic; }
+#underlineTextBtn { text-decoration: underline; }
+.text-section { margin-top: 16px; }
+.text-section summary { color: #526973; font-size: 12px; font-weight: 600; cursor: pointer; }
+.text-section > label { margin-top: 12px; }
+.text-indent { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; }
+.text-overflow-note { color: #946119; background: #fff7e6; border-radius: 6px; padding: 8px; font-size: 11px; line-height: 1.6; }
 .background-panel {
   border-top: 1px solid var(--border);
   padding-top: 18px;

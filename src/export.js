@@ -6,6 +6,7 @@ import { PDFDocument } from "pdf-lib";
 import pptxgen from "pptxgenjs";
 import { renderDeck } from "./deck.js";
 import { collectFiles } from "./files.js";
+import { canExportNativeText, pptxText, finalizeTextPptx } from "./text-export.js";
 const publicDir = new URL("../public/", import.meta.url);
 export async function exportDeck({ store, deck, format, url, contentOrigin }) {
   const root = store.path(deck.id, "assets");
@@ -30,13 +31,12 @@ export async function exportDeck({ store, deck, format, url, contentOrigin }) {
       .replace(/<head([^>]*)>/i, "<head$1>" + bootstrap)
       .replace(
         /<\/body>/i,
-        `<script id="sd-config" type="application/json">${config}</script><script src="assets/studio-viewer.js"></script></body>`,
+        `<script id="sd-config" type="application/json">${config}</script><script src="assets/studio-text-model.js"></script><script src="assets/studio-text-editor.js"></script><script src="assets/studio-viewer.js"></script></body>`,
       );
     zip.file("index.html", html);
-    zip.file(
-      "assets/studio-viewer.js",
-      await readFile(new URL("bridge.js", publicDir)),
-    );
+    for (const [source, target] of [["text-model.js", "studio-text-model.js"], ["text-editor.js", "studio-text-editor.js"], ["bridge.js", "studio-viewer.js"]]) {
+      zip.file("assets/" + target, await readFile(new URL(source, publicDir)));
+    }
     zip.file(
       "README.txt",
       `SDLAB Slides\n저장 버전: ${deck.revision}\n압축을 풀고 index.html을 브라우저에서 여세요.\n이 파일은 발표용입니다. 수정 내용은 자료실에서 관리하세요.\n`,
@@ -77,7 +77,7 @@ export async function exportDeck({ store, deck, format, url, contentOrigin }) {
       const allowed =
         u.origin === contentOrigin &&
         (u.pathname.startsWith(prefix) ||
-          u.pathname === "/_studio/bridge.js") &&
+          ["/_studio/bridge.js", "/_studio/text-model.js", "/_studio/text-editor.js"].includes(u.pathname)) &&
         route.request().method() === "GET";
       return allowed ? route.continue() : route.abort("blockedbyclient");
     });
@@ -99,6 +99,7 @@ export async function exportDeck({ store, deck, format, url, contentOrigin }) {
       ppt.title = deck.title;
       ppt.lang = "ko-KR";
     }
+    const nativeTextSlides = [];
     for (let i = 0; i < count; i++) {
       await page.evaluate((n) => window.__sd.go(n), i);
       await page.waitForTimeout(1000);
@@ -111,6 +112,8 @@ export async function exportDeck({ store, deck, format, url, contentOrigin }) {
         continue;
       }
       const slide = ppt.addSlide();
+      const nativeTextShapes = [];
+      nativeTextSlides.push(nativeTextShapes);
       let native = [];
       const nativeImages = new Map();
       if (format === "pptx-editable") {
@@ -122,7 +125,8 @@ export async function exportDeck({ store, deck, format, url, contentOrigin }) {
             e.x + e.w <= 1922 &&
             e.y + e.h <= 1082 &&
             e.w > 0 &&
-            e.h > 0,
+            e.h > 0 &&
+            (e.kind !== "text" || canExportNativeText(e)),
         );
         for (const e of native.filter((e) => e.kind === "image")) {
           try {
@@ -158,20 +162,9 @@ export async function exportDeck({ store, deck, format, url, contentOrigin }) {
             ...box,
           });
         } else {
-          slide.addText(e.text, {
-            ...box,
-            fontFace: "맑은 고딕",
-            fontSize: Math.max(4, e.fontSize / 2),
-            color: e.color,
-            bold: e.bold,
-            align: e.align,
-            margin: 0,
-            breakLine: false,
-            valign: "top",
-            fit: "shrink",
-            rotate: e.rotate,
-            lang: "ko-KR",
-          });
+          const mapped = pptxText(e, `sd-native-text-${nativeTextShapes.length}`);
+          slide.addText(mapped.runs, mapped.options);
+          nativeTextShapes.push(mapped);
         }
       }
       slide.addNotes(
@@ -187,7 +180,7 @@ export async function exportDeck({ store, deck, format, url, contentOrigin }) {
         extension: "pdf",
       };
     return {
-      buffer: await ppt.write({ outputType: "nodebuffer" }),
+      buffer: await finalizeTextPptx(await ppt.write({ outputType: "nodebuffer" }), nativeTextSlides),
       mime: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
       extension: "pptx",
     };

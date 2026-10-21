@@ -42,17 +42,26 @@ async function open(app, browser, d) {
 test("scene overrides survive duplication and original option removes override", () =>
   fixture(async (app, browser, d) => {
     const p = await open(app, browser, d);
+    const sceneSaved = p.waitForResponse(r => r.url().endsWith("/save") && r.request().method() === "POST");
     await p.locator("#sceneValue").selectOption("dim");
-    await p.waitForTimeout(700);
+    await sceneSaved;
+    await p.waitForFunction(() => document.querySelector("#saveStatus").textContent.startsWith("저장됨"));
+    const frameSource = await p.locator("#deckFrame").getAttribute("src");
+    const duplicated = p.waitForResponse(r => r.url().endsWith("/save") && r.request().method() === "POST");
     await p.locator("#duplicateSlideBtn").click();
-    await p.waitForTimeout(700);
+    await duplicated;
+    await p.waitForFunction(source => document.querySelector("#deckFrame").getAttribute("src") !== source, frameSource);
+    await p.frameLocator("#deckFrame").locator(".slide.active").waitFor();
     let s = (await app.store.get(d.id)).state;
-    assert.equal(s.scenes[s.order[1]], "dim");
+    const copyId = s.order[1];
+    assert.equal(s.scenes[copyId], "dim");
+    const restored = p.waitForResponse(r => r.url().endsWith("/save") && r.request().method() === "POST");
     await p.locator("#slideList .slide-item").first().click();
     await p.locator("#sceneValue").selectOption("");
-    await p.waitForTimeout(700);
+    await restored;
     s = (await app.store.get(d.id)).state;
     assert.equal(Object.hasOwn(s.scenes, "s0"), false);
+    assert.equal(s.scenes[copyId], "dim");
   }));
 test("scene input is preserved while a queued frame navigation settles editing", () =>
   fixture(async (app, browser, d) => {
