@@ -19,7 +19,7 @@ export async function exportDeck({ store, deck, format, url, contentOrigin }) {
     }
     let html = renderDeck(
       await readFile(join(root, "index.html"), "utf8"),
-      deck.state,
+      { ...deck.state, notes: { ...deck.sourceNotes, ...deck.state.notes } },
     );
     const config = JSON.stringify({
       edit: false,
@@ -40,7 +40,7 @@ export async function exportDeck({ store, deck, format, url, contentOrigin }) {
     }
     zip.file(
       "README.txt",
-      `SDLAB Slides\n저장 버전: ${deck.revision}\n압축을 풀고 index.html을 브라우저에서 여세요.\n이 파일은 발표용입니다. 수정 내용은 자료실에서 관리하세요.\n`,
+      `SDLAB Slides\n저장 버전: ${deck.revision}\n압축을 풀고 index.html을 브라우저에서 여세요.\n이 파일은 발표용입니다. 수정 내용은 자료실에서 관리하세요.\n발표자 노트도 HTML 원본에 포함되며, 파일을 받은 사람이 읽을 수 있습니다.\n`,
     );
     return {
       buffer: await zip.generateAsync({
@@ -99,6 +99,11 @@ export async function exportDeck({ store, deck, format, url, contentOrigin }) {
       ppt.subject = `Revision ${deck.revision}`;
       ppt.title = deck.title;
       ppt.lang = "ko-KR";
+      ppt.theme = {
+        headFontFace: deck.state.theme?.fonts?.heading || "Arial",
+        bodyFontFace: deck.state.theme?.fonts?.body || "Arial",
+        lang: "ko-KR",
+      };
     }
     const nativeTextSlides = [];
     const nativePictureSlides = [];
@@ -149,9 +154,9 @@ export async function exportDeck({ store, deck, format, url, contentOrigin }) {
         h: 7.5,
       });
       addNativeObjects(slide, prepared.entries, nativeTextShapes, nativePictures);
-      slide.addNotes(
-        `SDLAB Slides · 저장 버전 ${deck.revision} · ${i + 1}/${count}\n웹의 3D 배경은 정지 화면입니다. 편집 모드는 글꼴 및 줄바꿈 차이가 있을 수 있습니다.`,
-      );
+      const note = deck.state.notes?.[deck.state.order[i]] ?? deck.sourceNotes?.[deck.state.order[i]] ?? "";
+      const provenance = `SDLAB Slides · 저장 버전 ${deck.revision} · ${i + 1}/${count}\n웹의 3D 배경은 정지 화면입니다. 편집 모드는 글꼴 및 줄바꿈 차이가 있을 수 있습니다.`;
+      slide.addNotes(note ? `${note}\n\n${provenance}` : provenance);
       if (format === "pptx-editable")
         await page.evaluate(() => window.__sd.showNative());
     }

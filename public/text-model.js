@@ -1,7 +1,7 @@
 (function (global) {
   "use strict";
 
-  const characterKeys = ["fontFamily", "fontSize", "color", "bold", "italic", "underline"];
+  const characterKeys = ["fontFamily", "fontTheme", "fontSize", "color", "colorTheme", "bold", "italic", "underline"];
   const paragraphKeys = ["align", "lineHeight", "spaceAfter", "indent", "list"];
   const finite = (value, min, max) => typeof value === "number" && Number.isFinite(value) && value >= min && value <= max;
 
@@ -31,10 +31,14 @@
 
   function styles(value, scope) {
     const result = {};
+    if (scope === "character" && ((Object.hasOwn(value, "fontTheme") && Object.hasOwn(value, "fontFamily")) ||
+      (Object.hasOwn(value, "colorTheme") && Object.hasOwn(value, "color")))) throw new Error("테마와 개별 문자 서식은 함께 지정할 수 없습니다.");
     for (const key of scope === "character" ? characterKeys : paragraphKeys) {
       if (!Object.hasOwn(value, key)) continue;
       const item = value[key];
       if (key === "fontFamily") { result[key] = family(item); continue; }
+      if (key === "fontTheme" && !["heading", "body"].includes(item)) throw new Error("테마 글꼴 값 오류");
+      if (key === "colorTheme" && !["text", "accent"].includes(item)) throw new Error("테마 색상 값 오류");
       if (key === "fontSize" && !finite(item, 6, 400)) throw new Error("글꼴 크기 오류");
       if (key === "color" && (typeof item !== "string" || !/^#[\da-f]{6}$/i.test(item))) throw new Error("색상 값 오류");
       if (["bold", "italic", "underline"].includes(key) && typeof item !== "boolean") throw new Error("문자 서식 값 오류");
@@ -52,6 +56,15 @@
     const previous = runs.at(-1);
     if (previous && characterKeys.every(key => previous[key] === run[key])) previous.text += run.text;
     else runs.push(run);
+  }
+
+  function patchRun(run, patch) {
+    const result = { ...run, ...patch };
+    for (const [absolute, token] of [["fontFamily", "fontTheme"], ["color", "colorTheme"]]) {
+      if (Object.hasOwn(patch, absolute)) delete result[token];
+      if (Object.hasOwn(patch, token)) delete result[absolute];
+    }
+    return result;
   }
 
   function array(value, limit) {
@@ -123,7 +136,7 @@
           : range.start < end + (index < result.paragraphs.length - 1 ? 1 : 0) && range.end > start);
         return selected ? { ...paragraph, ...patch } : paragraph;
       }
-      if (range === null) return { ...paragraph, runs: paragraph.runs.map(run => ({ ...run, ...patch })) };
+      if (range === null) return { ...paragraph, runs: paragraph.runs.map(run => patchRun(run, patch)) };
       if (range.start === range.end) return paragraph;
       const runs = [];
       let position = start;
@@ -131,7 +144,7 @@
         const from = Math.max(0, range.start - position), to = Math.min(run.text.length, range.end - position);
         if (from < to) {
           if (from) appendRun(runs, { ...run, text: run.text.slice(0, from) });
-          appendRun(runs, { ...run, ...patch, text: run.text.slice(from, to) });
+          appendRun(runs, { ...patchRun(run, patch), text: run.text.slice(from, to) });
           if (to < run.text.length) appendRun(runs, { ...run, text: run.text.slice(to) });
         } else appendRun(runs, run);
         position += run.text.length;
@@ -231,8 +244,16 @@
           span.setAttribute("data-sd-run", "");
           span.style.cssText = "display:inline;white-space:pre-wrap;";
           if (run.fontFamily !== undefined) span.style.fontFamily = run.fontFamily;
+          if (run.fontTheme !== undefined) {
+            span.setAttribute("data-sd-font-theme", run.fontTheme);
+            span.style.fontFamily = `var(--sd-theme-${run.fontTheme}-font)`;
+          }
           if (run.fontSize !== undefined) span.style.fontSize = run.fontSize + "px";
           if (run.color !== undefined) { span.style.color = run.color; span.style.webkitTextFillColor = run.color; }
+          if (run.colorTheme !== undefined) {
+            span.setAttribute("data-sd-color-theme", run.colorTheme);
+            span.style.color = span.style.webkitTextFillColor = `var(--sd-theme-${run.colorTheme})`;
+          }
           if (run.bold !== undefined) span.style.fontWeight = run.bold ? "700" : "400";
           if (run.italic !== undefined) span.style.fontStyle = run.italic ? "italic" : "normal";
           if (run.underline !== undefined) span.style.textDecoration = run.underline ? "underline" : "none";

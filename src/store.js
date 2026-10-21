@@ -9,7 +9,8 @@ import {
 } from "node:fs/promises";
 import { join } from "node:path";
 import { randomUUID, randomBytes } from "node:crypto";
-import { initialState, validateState } from "./deck.js";
+import { parseHTML } from "linkedom";
+import { extractNotes, inheritNotes, initialState, validateState } from "./deck.js";
 import { authoringAssets } from "./authoring.js";
 export class Store {
   constructor(root) {
@@ -81,7 +82,33 @@ export class Store {
     const snap = JSON.parse(
       await readFile(this.path(id, "revisions", n + ".json"), "utf8"),
     );
-    return { ...meta, ...snap, state: validateState(snap.state, meta), revision: n };
+    // Validate explicit state before considering inherited source content. In
+    // particular, an old revision with no notes must not gain oversized entries.
+    const state = validateState(Object.hasOwn(snap.state, "notes") ? snap.state : { ...snap.state, notes: {} }, meta);
+    const sourceNotes = {};
+    const slideIds = [...meta.slides.map(slide => slide.id), ...Object.keys(state.clones)];
+    const missingNotes = slideIds.filter(slide => !Object.hasOwn(snap.state.notes || {}, slide));
+    if (missingNotes.length) {
+      // Earlier revisions had neither slide metadata nor state entries for notes.
+      // Read the immutable import only when necessary, without migrating history on disk.
+      const imported = new Map(meta.slides.filter(slide => typeof slide.notes === "string").map(slide => [slide.id, slide.notes]));
+      if (missingNotes.some(id => {
+        const source = Object.hasOwn(state.clones, id) ? state.clones[id] : id;
+        return source !== null && !imported.has(source);
+      })) {
+        const { document } = parseHTML(await readFile(this.path(id, "assets/index.html"), "utf8"));
+        for (const slide of document.querySelectorAll("[data-sd-slide]")) {
+          const slideId = slide.getAttribute("data-sd-slide");
+          if (!imported.has(slideId)) imported.set(slideId, extractNotes(slide));
+        }
+      }
+      for (const slide of missingNotes) {
+        const source = Object.hasOwn(state.clones, slide) ? state.clones[slide] : slide;
+        sourceNotes[slide] = source === null ? "" : imported.get(source) || "";
+      }
+      state.notes = inheritNotes(state, sourceNotes);
+    }
+    return { ...meta, ...snap, state: validateState(state, meta), sourceNotes, revision: n };
   }
   async list() {
     const entries = await readdir(this.root);

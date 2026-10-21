@@ -361,7 +361,7 @@ p {
 .editor-body {
   display: grid;
   grid-template-columns: 192px minmax(0, 1fr) 265px;
-  height: calc(100dvh - 135px);
+  height: calc(100dvh - 70px - var(--editor-toolbar-height, 65px));
   min-height: 550px;
 }
 .slide-rail {
@@ -410,6 +410,23 @@ p {
   background: #f2f9f7;
   color: #19574f;
 }
+.rail-help { margin: 0 12px 10px; font-size: 10px; color: #71858b; line-height: 1.7; }
+.rail-count { padding: 5px 12px; font-size: 10px; color: #587078; }
+.slide-item { padding: 5px; border-width: 2px; user-select: none; }
+.slide-item.selected { padding: 5px; }
+.slide-item.active-slide { box-shadow: 0 0 0 2px #29978935; }
+.slide-item.drop-before { border-top-color: #126c5f; box-shadow: 0 -4px 0 #299789; }
+.slide-item.drop-after { border-bottom-color: #126c5f; box-shadow: 0 4px 0 #299789; }
+.slide-thumbnail { position: relative; width: 100%; aspect-ratio: 16 / 9; overflow: hidden; background: #edf2f4; border-radius: 3px; pointer-events: none; }
+.slide-thumbnail iframe { position: absolute; inset: 0; width: 1920px; height: 1080px; border: 0; transform-origin: top left; pointer-events: none; }
+.slide-caption { display: flex; align-items: baseline; gap: 6px; padding: 5px 2px 0; }
+.slide-item .slide-number { flex-shrink: 0; margin: 0; }
+.slide-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.notes-panel { flex-shrink: 0; background: #f7fafb; border-top: 1px solid #d3e0e3; padding: 8px 12px; border-radius: 6px; font-size: 12px; }
+.notes-panel summary { cursor: pointer; color: #3d5a60; font-weight: 650; }
+.notes-panel summary span { margin-left: 8px; font-size: 10px; font-weight: 400; color: #71858b; }
+.notes-panel textarea { width: 100%; min-height: 72px; max-height: 180px; resize: vertical; margin-top: 4px; font: inherit; line-height: 1.6; }
+.notes-panel label { display: block; margin: 7px 0 0; }
 .slide-actions {
   padding: 10px;
   display: flex;
@@ -828,7 +845,7 @@ dialog::backdrop {
 .files-dialog {
   width: 760px;
 }
-.editor-toolbar { flex-wrap: wrap; }
+.editor-toolbar { flex-wrap: wrap; height: auto; min-height: 65px; padding-top: 10px; padding-bottom: 10px; }
 .object-visual-tools { border-top: 1px solid var(--border); margin-top: 16px; padding-top: 12px; }
 .object-visual-tools h3 { font-size: 13px; margin: 0 0 12px; }
 .shape-picker { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }

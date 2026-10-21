@@ -177,7 +177,7 @@
     let textInfo = { textEditable: false };
     if (TextEditor.eligible(e)) {
       try {
-        const rich = TextEditor.model(e), range = textRanges.get(e) || null;
+        const rich = TextEditor.resolve(e), range = textRanges.get(e) || null;
         textInfo = { textEditable: true, textEditing: textEdit?.el === e, textStyle: TextEditor.styleAt(rich, range), textBox: TextEditor.box(e), textRange: range, textOverflowing: e.dataset.sdTextOverflowing === "true" };
       } catch { /* Unsupported original text remains editable through HTML/CSS. */ }
     }
@@ -480,10 +480,11 @@
     for (const requestId of editRequests) tell("edit-settled", { requestId });
     editRequests.clear();
   }
-  function applyChanges(changes) {
+  function applyChanges(changes, operation) {
     const actual = changes.filter(({ id, patch: p }) => Object.entries(p).some(([key, value]) => effective(id)[key] !== value));
     for (const { id, patch: p } of actual) patch(id, p);
-    emitChanges(actual, changes.length > 1);
+    if (operation === "delete" && actual.length) tell("batch-change", { changes: actual, operation, slide: slides[current].dataset.sdSlide });
+    else emitChanges(actual, changes.length > 1);
     report();
   }
   function layerOrder(name) {
@@ -549,7 +550,7 @@
       delete copy.id; delete copy.slide; delete copy.locked; delete copy.hidden; delete copy.layerPosition;
       Object.assign(copy, box);
       if (copy.kind === "text") {
-        copy.richText = TextEditor.resolve(source);
+        copy.richText = TextEditor.snapshot(source);
         copy.textBox = TextEditor.box(source);
         copy.text = Text.plainText(copy.richText);
         copy.fontSize = parseFloat(getComputedStyle(source).fontSize);
@@ -588,7 +589,7 @@
       }
     }
     Object.assign(copy.style, { position: "relative", left: "auto", right: "auto", top: "auto", bottom: "auto", margin: "0", width: "100%", height: "100%", minWidth: "0", minHeight: "0", maxWidth: "none", maxHeight: "none", boxSizing: "border-box", transform: "none", transformOrigin: "center center", translate: "none", rotate: "none", scale: "none" });
-    const rich = source.dataset.sdRich === "true" ? TextEditor.resolve(source) : null;
+    const rich = source.dataset.sdRich === "true" ? TextEditor.snapshot(source) : null;
     return { kind: "html", html: copy.outerHTML, ...box, ...(rich ? { richText: rich, textBox: TextEditor.box(source) } : {}) };
   }
   function command(name) {
@@ -613,9 +614,9 @@
         tell("object-structure", { operation: name, slide: slides[current].dataset.sdSlide, removeIds: [selected.dataset.sdId], objects: Objects.ungroup(snapshotObject(selected)) });
         return;
       }
-      if (["hide", "lock"].includes(name)) {
-        const key = name === "hide" ? "hidden" : "locked";
-        applyChanges(selection.map(e => ({ id: e.dataset.sdId, patch: { [key]: true } })));
+      if (["hide", "lock", "delete"].includes(name)) {
+        const key = name === "lock" ? "locked" : "hidden";
+        applyChanges(selection.map(e => ({ id: e.dataset.sdId, patch: { [key]: true } })), name);
         select(null);
       }
       if (["duplicate", "copy"].includes(name)) {
@@ -843,7 +844,7 @@
           e.preventDefault();
           finishDrag(false);
           finishNudge(true);
-          command("hide");
+          command("delete");
         }
         if ((e.ctrlKey || e.metaKey) && ["a", "d", "c", "v"].includes(e.key.toLowerCase())) {
           e.preventDefault();

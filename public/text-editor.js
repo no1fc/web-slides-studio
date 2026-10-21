@@ -12,14 +12,32 @@
     return !!el && !["group", "image", "shape"].includes(el.dataset.sdKind) && !["IMG", "SVG", "CANVAS", "VIDEO", "IFRAME", "INPUT", "TEXTAREA", "BUTTON", "SELECT"].includes(el.tagName) &&
       !el.querySelector("[data-sd-id],img,svg,canvas,video,audio,iframe,input,textarea,button,select,table,script,style");
   }
-  function runStyle(node, scale = 1, root = node) {
+  function themeReference(node, root, property, attribute, choices, pattern) {
+    for (let parent = node; parent; parent = parent.parentElement) {
+      const declaration = parent.style[property];
+      // The closest inline declaration wins, including a user's explicit style
+      // inside a themed run. Markers also survive native editing wrappers.
+      if (declaration && !["inherit", "unset"].includes(declaration)) return declaration.match(pattern)?.[1];
+      const token = parent.getAttribute(attribute);
+      if (choices.includes(token)) return token;
+      if (parent === root) break;
+    }
+  }
+  function runStyle(node, scale = 1, root = node, preserveThemes = true) {
     const c = getComputedStyle(node);
     let underline = false;
     for (let parent = node; parent; parent = parent.parentElement) {
       underline ||= getComputedStyle(parent).textDecorationLine.includes("underline");
       if (parent === root) break;
     }
-    return { fontFamily: c.fontFamily, fontSize: round(parseFloat(c.fontSize) / scale), color: color(c.color), bold: Number(c.fontWeight) >= 600, italic: c.fontStyle === "italic" || c.fontStyle === "oblique", underline };
+    const result = { fontFamily: c.fontFamily, fontSize: round(parseFloat(c.fontSize) / scale), color: color(c.color), bold: Number(c.fontWeight) >= 600, italic: c.fontStyle === "italic" || c.fontStyle === "oblique", underline };
+    if (preserveThemes) {
+      const fontTheme = themeReference(node, root, "fontFamily", "data-sd-font-theme", ["heading", "body"], /^var\(\s*--sd-theme-(heading|body)-font\s*\)$/);
+      const colorTheme = themeReference(node, root, "color", "data-sd-color-theme", ["text", "accent"], /^var\(\s*--sd-theme-(text|accent)\s*\)$/);
+      if (fontTheme) { result.fontTheme = fontTheme; delete result.fontFamily; }
+      if (colorTheme) { result.colorTheme = colorTheme; delete result.color; }
+    }
+    return result;
   }
   function paragraphStyle(node, scale = 1) {
     const c = getComputedStyle(node), size = parseFloat(c.fontSize) || 16;
@@ -27,7 +45,7 @@
     const parent = node.parentElement;
     return { align: ["left", "center", "right", "justify"].includes(c.textAlign) ? c.textAlign : "left", lineHeight: round(clamp(lineHeight, 0.5, 4)), spaceAfter: round(clamp(parseFloat(c.marginBottom) / scale || 0, 0, 200)), indent: clamp(Number(node.dataset.sdIndent) || 0, 0, 8), list: node.dataset.sdList || (node.tagName === "LI" ? parent?.tagName === "OL" ? "number" : "bullet" : "none") };
   }
-  function scan(el) {
+  function scan(el, preserveThemes = true) {
     const scale = Number(el.dataset.sdFontScale) || 1;
     const container = el.querySelector(":scope > [data-sd-text-content]") || el;
     const paragraphs = [], positions = new WeakMap();
@@ -35,13 +53,13 @@
     const nonempty = () => current.runs.some(r => r.text.length);
     function flush(force = false) {
       if (force || nonempty()) {
-        if (!current.runs.length) current.runs.push({ text: "", ...runStyle(current.node, scale, el) });
+        if (!current.runs.length) current.runs.push({ text: "", ...runStyle(current.node.querySelector("[data-sd-run]") || current.node, scale, el, preserveThemes) });
         paragraphs.push(current);
       }
       current = { ...paragraphStyle(current.node, scale), runs: [], pieces: [], node: current.node };
     }
     function text(node) {
-      const raw = node.nodeValue || "", style = runStyle(node.parentElement, scale, el);
+      const raw = node.nodeValue || "", style = runStyle(node.parentElement, scale, el, preserveThemes);
       const pre = /pre|break-spaces/.test(getComputedStyle(node.parentElement).whiteSpace);
       let content = pre ? raw : raw.replace(/[ \t\r\n\f]+/g, " ");
       if (!pre && current.runs.at(-1)?.text.endsWith(" ")) content = content.replace(/^ /, "");
@@ -95,17 +113,19 @@
   function box(el) {
     try { return T.normalizeTextBox(JSON.parse(el.dataset.sdTextBox || "{}")); } catch { return {}; }
   }
-  function resolve(el) {
-    if (el.isContentEditable || !el.dataset.sdRichText) return read(el);
+  function resolvedModel(el, preserveThemes) {
+    if (el.isContentEditable || !el.dataset.sdRichText) return scan(el, preserveThemes).rich;
     const rich = model(el), scale = Number(el.dataset.sdFontScale) || 1;
     const nodes = [...el.querySelectorAll("[data-sd-paragraph]")];
     return T.normalizeRichText({ paragraphs: rich.paragraphs.map((paragraph, i) => {
-      const node = nodes[i]; if (!node) return paragraph;
+      const node = nodes[i] || el;
       const runs = [...node.querySelectorAll("[data-sd-run]")];
       return { ...paragraph, ...paragraphStyle(node, scale), runs: paragraph.runs.map((run, j) =>
-        runs[j] ? { ...run, ...runStyle(runs[j], scale, el), text: run.text } : run) };
+        ({ text: run.text, ...runStyle(runs[j] || node, scale, el, preserveThemes) })) };
     }) });
   }
+  function resolve(el) { return resolvedModel(el, false); }
+  function snapshot(el) { return resolvedModel(el, true); }
   function offsetAt(root, node, offset, data) {
     const point = data.positions.get(node);
     if (node.nodeType === 3 && Array.isArray(point)) {
@@ -230,5 +250,5 @@
     });
     return T.normalizeRichText({ paragraphs });
   }
-  globalThis.SDTextEditor = { eligible, read, model, box, resolve, capture, restore, styleAt, fit, render, replaceText };
+  globalThis.SDTextEditor = { eligible, read, model, box, resolve, snapshot, capture, restore, styleAt, fit, render, replaceText };
 })();

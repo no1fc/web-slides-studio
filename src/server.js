@@ -9,6 +9,7 @@ import { inventory, sourceArchive, collectFiles } from "./files.js";
 import { importArchive, safePath } from "./archive.js";
 import { renderDeck, prepareDeck, validateState } from "./deck.js";
 import { authoringSource } from "./authoring.js";
+import { renderThumbnail } from "./thumbnail.js";
 const base = fileURLToPath(new URL("..", import.meta.url));
 const types = {
   ".html": "text/html; charset=utf-8",
@@ -521,7 +522,7 @@ export async function startStudio(opts = {}) {
         return;
       }
       const p = url.pathname === "/" ? "index.html" : url.pathname.slice(1);
-      if (!["index.html", "style.css", "app.js", "authoring-ui.js", "jszip.min.js", "text-model.js", "object-model.js"].includes(p)) {
+      if (!["index.html", "style.css", "app.js", "authoring-ui.js", "slide-ui.js", "slide-model.js", "jszip.min.js", "text-model.js", "object-model.js"].includes(p)) {
         send(res, 404, { error: "페이지를 찾을 수 없습니다." });
         return;
       }
@@ -594,7 +595,17 @@ export async function startStudio(opts = {}) {
           store.path(id, "assets/index.html"),
           "utf8",
         );
-        let html = renderDeck(source, d.state);
+        const renderState = { ...d.state, notes: { ...d.sourceNotes, ...d.state.notes } };
+        if (url.searchParams.get("mode") === "thumbnail") {
+          const nonce = randomBytes(18).toString("base64");
+          res.setHeader(
+            "Content-Security-Policy",
+            `sandbox allow-scripts allow-same-origin; default-src 'none'; script-src 'nonce-${nonce}'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; media-src 'none'; connect-src 'none'; worker-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors ${origin}`,
+          );
+          send(res, 200, renderThumbnail(source, renderState, url.searchParams.get("slide"), nonce), "text/html; charset=utf-8");
+          return;
+        }
+        let html = renderDeck(source, renderState);
         // Per-document memory storage prevents an imported deck's old localStorage from overriding saved revisions.
         const bootstrap =
           '<script>(()=>{const m=new Map();const s={getItem:k=>m.get(k)||null,setItem:(k,v)=>m.set(k,String(v)),removeItem:k=>m.delete(k),clear:()=>m.clear()};try{Object.defineProperty(window,"localStorage",{value:s});}catch{}})();</script>';

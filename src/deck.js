@@ -2,11 +2,42 @@ import { parseHTML } from "linkedom";
 import { record, normalizeCode, codeIds, renderAuthoring } from "./authoring.js";
 import "../public/text-model.js";
 import "../public/object-model.js";
+import "../public/slide-model.js";
 const { normalizeRichText, normalizeTextBox, renderRichText } = globalThis.SDText;
 const Objects = globalThis.SDObjects;
+const Slides = globalThis.SDSlides;
+// Keep states at the former 2 MB boundary editable after adding default fields.
+const stateSizeLimit = 2_000_000 + 1024;
 const tags = "h1,h2,h3,h4,p,li,td,th,img,blockquote,figcaption,code,span,div";
 const num = (x, min, max) =>
   typeof x === "number" && Number.isFinite(x) && x >= min && x <= max;
+export function extractNotes(slide) {
+  const notes = slide.querySelector(".notes")?.cloneNode(true);
+  if (!notes) return "";
+  for (const br of notes.querySelectorAll("br")) br.replaceWith("\n");
+  for (const block of notes.querySelectorAll("p,div,li")) {
+    if (block.nextSibling && !block.textContent.endsWith("\n")) block.append("\n");
+  }
+  return notes.textContent;
+}
+// Imported notes remain in the immutable source even when they cannot fit the
+// editable state. Explicit user edits are still checked by validateState.
+export function inheritNotes(state, inherited) {
+  const notes = { ...(state.notes || {}) };
+  let size = JSON.stringify({ ...state, notes }).length, count = Object.keys(notes).length;
+  for (const [id, text] of Object.entries(inherited)) {
+    if (Object.hasOwn(notes, id) || typeof text !== "string" || text.length > 20000) continue;
+    const extra = (count ? 1 : 0) + JSON.stringify(id).length + 1 + JSON.stringify(text).length;
+    if (size + extra > stateSizeLimit) continue;
+    notes[id] = text; size += extra; count++;
+  }
+  return notes;
+}
+function initialNotes(deck, clones = {}, state = {}) {
+  const notes = Object.fromEntries(deck.slides.map(slide => [slide.id, slide.notes ?? ""]));
+  for (const [id, source] of Object.entries(clones)) notes[id] = notes[source] ?? "";
+  return inheritNotes(state, notes);
+}
 export function prepareDeck(html) {
   const { document } = parseHTML(html);
   if (!document.body) throw new Error("HTML 문서가 필요합니다.");
@@ -44,12 +75,13 @@ export function prepareDeck(html) {
         s.querySelector("h1,h2,h3")?.textContent.trim() ||
         `${i + 1}번 슬라이드`,
       scene: s.getAttribute("data-scene") || "",
+      notes: extractNotes(s),
     })),
     elements,
   };
 }
 export function initialState(deck) {
-  return {
+  const state = {
     schemaVersion: 1,
     order: deck.slides.map((s) => s.id),
     patches: {},
@@ -60,13 +92,31 @@ export function initialState(deck) {
     slideCode: {},
     masters: {},
     slideMasters: {},
+    notes: {},
+    slideLayouts: {},
+    theme: Slides.normalizeTheme(),
   };
+  state.notes = initialNotes(deck, {}, state);
+  return state;
 }
-const stateKeys = new Set(["schemaVersion", "order", "patches", "added", "clones", "scenes", "background", "slideCode", "masters", "slideMasters"]);
+const stateKeys = new Set(["schemaVersion", "order", "patches", "added", "clones", "scenes", "background", "slideCode", "masters", "slideMasters", "notes", "slideLayouts", "theme"]);
+function strictRecord(value, label, allowed) {
+  record(value, label);
+  for (const key of Reflect.ownKeys(value)) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (typeof key !== "string" || allowed && !allowed.has(key) || !descriptor.enumerable || !Object.hasOwn(descriptor, "value"))
+      throw new Error(`허용되지 않는 ${label} 항목입니다.`);
+  }
+}
 export function migrateState(raw) {
-  record(raw, "편집 데이터");
-  if (Object.keys(raw).some((key) => !stateKeys.has(key))) throw new Error("허용되지 않는 편집 항목입니다.");
+  strictRecord(raw, "편집 데이터", stateKeys);
   if (raw.schemaVersion !== undefined && raw.schemaVersion !== 1) throw new Error("지원하지 않는 편집 데이터 버전입니다.");
+  if (Object.hasOwn(raw, "theme")) Slides.normalizeTheme(raw.theme);
+  if (Object.hasOwn(raw, "notes")) strictRecord(raw.notes, "발표자 노트");
+  if (Object.hasOwn(raw, "slideLayouts")) {
+    strictRecord(raw.slideLayouts, "슬라이드 레이아웃");
+    for (const layout of Object.values(raw.slideLayouts)) Slides.normalizeLayout(layout);
+  }
   if (Object.hasOwn(raw, "patches")) {
     record(raw.patches, "수정 데이터");
     for (const patch of Object.values(raw.patches)) {
@@ -90,10 +140,11 @@ export function migrateState(raw) {
     }
   }
   state.schemaVersion = 1;
-  for (const key of ["clones", "scenes", "slideCode", "masters", "slideMasters"]) {
+  for (const key of ["clones", "scenes", "slideCode", "masters", "slideMasters", "notes", "slideLayouts"]) {
     if (!Object.hasOwn(state, key)) state[key] = {};
     record(state[key], key);
   }
+  state.theme = Slides.normalizeTheme(state.theme);
   return state;
 }
 const patchKeys = new Set([
@@ -157,9 +208,11 @@ function validPatch(p) {
   }
 }
 export function validateState(raw, deck) {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw) || JSON.stringify(raw).length > 2_000_000)
+  if (!raw || typeof raw !== "object" || Array.isArray(raw))
     throw new Error("편집 데이터가 너무 큽니다.");
   const state = migrateState(raw);
+  if (JSON.stringify(state).length > stateSizeLimit) throw new Error("편집 데이터가 너무 큽니다.");
+  if (!Object.hasOwn(raw, "notes")) state.notes = initialNotes(deck, state.clones, state);
   if (
     !Array.isArray(state.order) ||
     !state.order.length ||
@@ -250,6 +303,22 @@ export function validateState(raw, deck) {
     }
   }
   if (total > 500) throw new Error("그룹 내부를 포함한 추가 요소는 500개까지 사용할 수 있습니다.");
+  for (const [id, notes] of Object.entries(state.notes)) {
+    if (!slideIds.has(id) || typeof notes !== "string" || notes.length > 20000)
+      throw new Error("발표자 노트는 유효한 슬라이드의 20,000자 이내 텍스트여야 합니다.");
+  }
+  const placeholderIds = new Set();
+  for (const [id, rawLayout] of Object.entries(state.slideLayouts)) {
+    if (!slideIds.has(id)) throw new Error("알 수 없는 레이아웃 슬라이드입니다.");
+    const layout = Slides.normalizeLayout(rawLayout);
+    for (const objectId of Object.values(layout.placeholders)) {
+      const object = state.added.find(item => item.id === objectId);
+      if (!object || object.slide !== id || object.kind !== "text" || placeholderIds.has(objectId))
+        throw new Error("자리표시자는 해당 슬라이드의 서로 다른 추가 텍스트 개체여야 합니다.");
+      placeholderIds.add(objectId);
+    }
+    state.slideLayouts[id] = layout;
+  }
   for (const [id, scene] of Object.entries(state.scenes)) {
     if (
       !slideIds.has(id) ||
@@ -260,7 +329,7 @@ export function validateState(raw, deck) {
       throw new Error("장면 오류");
   }
   if (typeof state.background !== "boolean") throw new Error("배경 표시 오류");
-  if (JSON.stringify(state).length > 2_000_000) throw new Error("편집 데이터가 너무 큽니다.");
+  if (JSON.stringify(state).length > stateSizeLimit) throw new Error("편집 데이터가 너무 큽니다.");
   return {
     schemaVersion: state.schemaVersion,
     order: state.order,
@@ -272,6 +341,9 @@ export function validateState(raw, deck) {
     slideCode: state.slideCode,
     masters: state.masters,
     slideMasters: state.slideMasters,
+    notes: state.notes,
+    slideLayouts: state.slideLayouts,
+    theme: state.theme,
   };
 }
 export function applyPatch(e, p) {
@@ -335,6 +407,24 @@ export function renderDeck(html, state) {
     if (s) parent.append(s);
   }
   renderAuthoring(document, all, state);
+  const theme = Slides.normalizeTheme(state.theme);
+  for (const [id, slide] of all) {
+    slide.style.setProperty("--sd-theme-heading-font", theme.fonts.heading);
+    slide.style.setProperty("--sd-theme-body-font", theme.fonts.body);
+    slide.style.setProperty("--sd-theme-text", theme.colors.text);
+    slide.style.setProperty("--sd-theme-accent", theme.colors.accent);
+    if (Object.hasOwn(state.slideLayouts || {}, id)) slide.style.background = theme.colors.background;
+    if (Object.hasOwn(state.notes || {}, id)) {
+      const existing = [...slide.querySelectorAll(".notes")];
+      const notes = existing.shift() || document.createElement("aside");
+      existing.forEach(element => element.remove());
+      notes.classList.add("notes");
+      notes.textContent = state.notes[id];
+      notes.style.whiteSpace = "pre-wrap";
+      notes.setAttribute("hidden", "");
+      if (!notes.parentElement) slide.append(notes);
+    }
+  }
   for (const a of state.added || []) {
     const s = all.get(a.slide);
     if (!s) continue;

@@ -87,7 +87,8 @@ function clearSlideSourcePatches(candidate, slide) {
   for (const id of Object.keys(candidate.patches))
     if (id.startsWith("c-" + slide + "--")) delete candidate.patches[id];
 }
-function duplicateAuthoring(old, id, source) {
+function duplicateAuthoring(old, id, source, target = state) {
+  const state = target;
   state.slideCode ||= {};
   state.slideMasters ||= {};
   if (state.slideMasters[old]) state.slideMasters[id] = state.slideMasters[old];

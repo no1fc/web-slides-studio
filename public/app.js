@@ -37,6 +37,9 @@ function layoutCanvas() {
   wrap.style.marginTop = `${Math.max(0, (viewport.clientHeight - 1080 * factor) / 2)}px`;
 }
 new ResizeObserver(layoutCanvas).observe($("canvasViewport"));
+new ResizeObserver(([entry]) => {
+  $("editor").style.setProperty("--editor-toolbar-height", `${entry.target.offsetHeight}px`);
+}).observe(document.querySelector(".editor-toolbar"));
 $("zoomValue").onchange = () => { layoutCanvas(); $("canvasViewport").scrollTo(0, 0); };
 $("lockAspect").onchange = () => post("settings", { lockAspect: $("lockAspect").checked });
 let frameReady = false;
@@ -109,7 +112,7 @@ async function settleEditing() {
   await objectWork;
 }
 function transitionTools() {
-  for (const id of ["sceneValue", "backgroundValue", "undoBtn", "redoBtn"]) $(id).disabled = transitionBusy;
+  for (const id of ["sceneValue", "backgroundValue", "undoBtn", "redoBtn", "addSlideBtn", "removeSlideBtn", "duplicateSlideBtn", "upSlideBtn", "downSlideBtn", "layoutBtn", "themeBtn", "notesValue"]) $(id).disabled = transitionBusy;
   $("slideList").querySelectorAll("button").forEach(button => { button.disabled = transitionBusy; });
 }
 function transitionAction(fn, processingStatus) {
@@ -168,6 +171,7 @@ async function flush() {
       // Only normalize the snapshot that was acknowledged; later edits stay local.
       if (editEpoch === epoch) state = clone(d.state);
       deck = { ...d, state };
+      window.SDSlideUI?.render();
       $("saveStatus").textContent = dirty
         ? "저장 대기"
         : `저장됨 · v${d.revision}`;
@@ -275,10 +279,16 @@ async function structural(fn) {
   renderSlides();
   refreshFrame();
 }
-function patch(p) {
+function detachPlaceholders(candidate, ids) {
+  for (const layout of Object.values(candidate.slideLayouts || {})) {
+    for (const [role, id] of Object.entries(layout.placeholders)) if (ids.includes(id)) delete layout.placeholders[role];
+  }
+}
+function patch(p, deleted = false) {
   if (!selected || !activeElement(selected.id) || objectLocked(selected.id) || objectBusy) return;
   checkpoint();
   state.patches[selected.id] = { ...(state.patches[selected.id] || {}), ...p };
+  if (deleted) detachPlaceholders(state, [selected.id]);
   post("patch", { id: selected.id, patch: p });
   Object.assign(selected, p);
   if (p.hidden) {
@@ -303,7 +313,10 @@ async function history(back) {
     dest = back ? redo : undo;
   if (!source.length) return;
   dest.push(clone(state));
+  const active = state.order[index];
   state = source.pop();
+  const restoredIndex = state.order.indexOf(active);
+  index = restoredIndex >= 0 ? restoredIndex : Math.min(index, state.order.length - 1);
   mark();
   await flush();
   renderSlides();
@@ -576,7 +589,7 @@ async function validateObjectState(candidate, context) {
   if (editEpoch !== epoch) throw new Error("검증 중 다른 편집이 적용되었습니다. 명령을 다시 실행해 주세요.");
   return clone(result.state);
 }
-function receiveBatch(changes) {
+function receiveBatch(changes, deleted = false) {
   if (!Array.isArray(changes) || !changes.length || changes.length > 2000) return;
   const seen = new Set();
   for (const change of changes) {
@@ -590,6 +603,7 @@ function receiveBatch(changes) {
   queueObjectWork(context, async () => {
     const candidate = clone(state);
     for (const { id, patch: value } of changes) candidate.patches[id] = { ...(candidate.patches[id] || {}), ...value };
+    if (deleted) detachPlaceholders(candidate, changes.filter(change => change.patch.hidden === true).map(change => change.id));
     const validated = await validateObjectState(candidate, context);
     if (!validated) return;
     checkpoint();
@@ -648,6 +662,7 @@ function receiveStructure(operation, removeIds, objects) {
     }
     candidate.added = candidate.added.filter(a => !removeIds.includes(a.id));
     for (const id of removeIds) delete candidate.patches[id];
+    detachPlaceholders(candidate, removeIds);
     candidate.added.push(...replacements);
     // Keep the group's position at its highest source; expand children in place.
     const siblings = layerItems.filter(item => item.group === sourceLayers[0].group).sort((a, b) => a.z - b.z);
@@ -675,33 +690,19 @@ for (const [id, name] of Object.entries(arrangementCommands))
   $(id).onclick = action(() => { if (!$(id).disabled) post("command", { name }); });
 $("pasteObjectsBtn").onclick = action(pasteObjects);
 function slideTitle(id) {
+  const titleId = state.slideLayouts?.[id]?.placeholders.title;
+  if (titleId) {
+    const title = { ...state.added.find(a => a.id === titleId), ...state.patches[titleId] };
+    const text = title.richText ? SDText.plainText(title.richText) : title.text;
+    if (text?.trim()) return text.trim().slice(0, 100);
+  }
   const source = state.clones[id] ?? id;
   const s = deck.slides.find((s) => s.id === source);
   return s?.title || "빈 슬라이드";
 }
 function renderSlides() {
-  const list = $("slideList");
-  list.replaceChildren();
-  state.order.forEach((id, i) => {
-    const b = el(
-      "button",
-      undefined,
-      "slide-item" + (i === index ? " selected" : ""),
-    );
-    b.append(
-      el("span", String(i + 1).padStart(2, "0")),
-      el("div", slideTitle(id)),
-    );
-    b.onclick = transitionAction(() => {
-      clearSelection();
-      layerItems = [];
-      index = i;
-      post("go", { index });
-      renderSlides();
-      renderLayers();
-    }, "슬라이드 이동 중…");
-    list.append(b);
-  });
+  index = Math.max(0, Math.min(index, state.order.length - 1));
+  window.SDSlideUI?.render();
   $("slideLabel").textContent = `${index + 1} / ${state.order.length}`;
   $("backgroundValue").checked = state.background;
   const scene = $("sceneValue");
@@ -756,7 +757,7 @@ window.addEventListener("message", (e) => {
     state.patches[d.id] = { ...(state.patches[d.id] || {}), ...d.patch };
     mark();
   }
-  if (d.type === "batch-change" && frameReady) receiveBatch(d.changes);
+  if (d.type === "batch-change" && frameReady) receiveBatch(d.changes, d.operation === "delete");
   if (d.type === "layers" && Array.isArray(d.items)) {
     if (d.items.some(item => !item || !activeElement(item.id))) return;
     layerItems = d.items;
@@ -797,6 +798,7 @@ async function openDeck(id) {
   undo = [];
   redo = [];
   index = 0;
+  window.SDSlideUI?.reset();
   $("library").hidden = true;
   $("editor").hidden = false;
   layoutCanvas();
@@ -1073,58 +1075,9 @@ $("shapeStrokeWidthValue").onchange = () => {
   visualPatch("shape", { strokeWidth: Number(control.value) });
 };
 $("shapeNoFillValue").onchange = () => visualPatch("shape", { fill: $("shapeNoFillValue").checked ? "none" : $("shapeFillValue").value });
-$("removeElementBtn").onclick = () => patch({ hidden: true });
+$("removeElementBtn").onclick = action(() => patch({ hidden: true }, true));
 $("undoBtn").onclick = () => performHistory(true);
 $("redoBtn").onclick = () => performHistory(false);
-$("addSlideBtn").onclick = action(() =>
-  structural(() => {
-    const id = uid("s");
-    state.clones[id] = null;
-    state.order.splice(++index, 0, id);
-  }),
-);
-$("removeSlideBtn").onclick = action(async () => {
-  if (state.order.length === 1)
-    throw new Error("슬라이드는 하나 이상 필요합니다.");
-  await structural(() => state.order.splice(index, 1));
-});
-for (const [id, delta] of [
-  ["upSlideBtn", -1],
-  ["downSlideBtn", 1],
-])
-  $(id).onclick = action(async () => {
-    const next = index + delta;
-    if (next < 0 || next >= state.order.length) return;
-    await structural(() => {
-      [state.order[index], state.order[next]] = [
-        state.order[next],
-        state.order[index],
-      ];
-      index = next;
-    });
-  });
-$("duplicateSlideBtn").onclick = action(() =>
-  structural(() => {
-    const old = state.order[index],
-      id = uid("s"),
-      source = Object.hasOwn(state.clones, old) ? state.clones[old] : old;
-    state.clones[id] = source;
-    duplicateAuthoring(old, id, source);
-    if (Object.hasOwn(state.scenes, old)) state.scenes[id] = state.scenes[old];
-    state.order.splice(++index, 0, id);
-    for (const e of deck.elements.filter((e) => e.slide === source)) {
-      const oldId = old === source ? e.id : old + "--" + e.id;
-      if (state.patches[oldId])
-        state.patches[id + "--" + e.id] = clone(state.patches[oldId]);
-    }
-    for (const a of state.added.filter((a) => a.slide === old)) {
-      const copy = { ...clone(a), id: uid("a"), slide: id };
-      state.added.push(copy);
-      if (state.patches[a.id])
-        state.patches[copy.id] = clone(state.patches[a.id]);
-    }
-  }),
-);
 $("addTextBtn").onclick = action(() =>
   structural(() =>
     state.added.push({
@@ -1503,7 +1456,8 @@ window.addEventListener("beforeunload", (e) => {
   }
 });
 document.addEventListener("keydown", (e) => {
-  if (!deck || e.isComposing || e.target.isContentEditable || /INPUT|TEXTAREA|SELECT/.test(e.target.tagName) || $("dialog").open) return;
+  if (!deck || transitionBusy || e.isComposing || e.target.isContentEditable || /INPUT|TEXTAREA|SELECT/.test(e.target.tagName) || $("dialog").open) return;
+  if (window.SDSlideUI?.keydown(e)) return;
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
     e.preventDefault();
     performHistory(!e.shiftKey);
