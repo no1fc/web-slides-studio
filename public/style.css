@@ -898,6 +898,11 @@ dialog::backdrop {
 #passwordError {
   color: #a13b3b;
 }
+#dataGridValue { width:100%; min-height:180px; white-space:pre; font-family:monospace; tab-size:14; }
+#dialogBody:has(#dataGridValue) label, #dialogBody:has(#transitionValue) label { display:block; margin:12px 0; }
+#dialogBody:has(#dataGridValue) label input:not([type=checkbox]), #dialogBody:has(#dataGridValue) select, #dialogBody:has(#transitionValue) select { display:block; width:100%; margin-top:5px; }
+#dataEditError { color:#a13b3b; }
+#pptxImportWarnings { max-height:300px; overflow:auto; }
 @media (max-width: 600px) {
   .file-row {
     align-items: flex-start;

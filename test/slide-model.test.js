@@ -72,9 +72,9 @@ test("a legacy state at the old exact size limit migrates and survives a saved r
 });
 
 test("normalized state accepts the migration margin boundary and rejects one character beyond it", () => {
-  const boundary = stateOfSize(2001024);
-  assert.equal(JSON.stringify(validateState(boundary, deck)).length, 2001024);
-  assert.throws(() => validateState(stateOfSize(2001025), deck), /너무 큽니다/);
+  const boundary = stateOfSize(2001088);
+  assert.equal(JSON.stringify(validateState(boundary, deck)).length, 2001088);
+  assert.throws(() => validateState(stateOfSize(2001089), deck), /너무 큽니다/);
 });
 
 test("inherited notes share the migration margin without inflating editable state past its limit", () => {
@@ -82,7 +82,7 @@ test("inherited notes share the migration margin without inflating editable stat
   const notes = inheritNotes(nearBoundary, { s0: "fits", s1: "x".repeat(20000) });
   assert.deepEqual(notes, { s0: "fits" });
   assert.ok(JSON.stringify({ ...nearBoundary, notes }).length <= 2001024);
-  const full = stateOfSize(2001024);
+  const full = stateOfSize(2001088);
   assert.deepEqual(inheritNotes(full, { s0: "" }), {});
   assert.doesNotThrow(() => validateState({ ...full, notes: inheritNotes(full, { s0: "x".repeat(20000) }) }, deck));
 });

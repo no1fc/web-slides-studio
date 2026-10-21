@@ -167,6 +167,7 @@
       duplicateAuthoring(old, id, source, candidate);
       if (Object.hasOwn(candidate.scenes, old)) candidate.scenes[id] = candidate.scenes[old];
       if (Object.hasOwn(candidate.notes, old)) candidate.notes[id] = candidate.notes[old];
+      if (Object.hasOwn(candidate.transitions, old)) candidate.transitions[id] = candidate.transitions[old];
       for (const item of deck.elements.filter(item => item.slide === source)) {
         const oldId = old === source ? item.id : `${old}--${item.id}`;
         if (candidate.patches[oldId]) candidate.patches[`${id}--${item.id}`] = clone(candidate.patches[oldId]);
@@ -176,6 +177,7 @@
         const copy = { ...clone(item), id: uid("a"), slide: id };
         objectIds.set(item.id, copy.id); candidate.added.push(copy);
         if (candidate.patches[item.id]) candidate.patches[copy.id] = clone(candidate.patches[item.id]);
+        if (candidate.animations[item.id]) candidate.animations[copy.id] = candidate.animations[item.id];
       }
       if (candidate.slideLayouts[old]) {
         const layout = clone(candidate.slideLayouts[old]);

@@ -202,6 +202,14 @@ PDF와 외형 보존 PPTX는 슬라이드 캡처이고, 편집 가능 PPTX는 �
 
 `mode=thumbnail&slide=<id>`는 해당 리비전의 선택 슬라이드를 1920×1080 정적 문서로 제공한다. `src/thumbnail.js`가 원본 script/event/iframe/canvas 등을 제거하고 조상 CSS 선택자를 위한 DOM 경로와 스타일·이미지를 보존한다. nonce CSP로 배포한 텍스트·개체 렌더러만 실행하며 편집 bridge는 넣지 않는다. 목록에서는 IntersectionObserver로 화면 주변 iframe만 로드하고 선택만 바뀌면 기존 iframe을 재사용한다.
 
+## PPTX 가져오기·데이터 개체·효과
+
+`public/data-model.js`는 서버와 브라우저가 공유하는 표/차트 검증·DOM/SVG 렌더러다. `added`의 `kind: "table"|"chart"`에 구조화된 `table`/`chart`를 저장하며 `patches`에도 같은 데이터를 사용할 수 있다. 표는 최대 20행×10열, 차트는 최대 20범주×5계열이다. 회전과 그룹은 거부한다. `public/data-ui.js`가 quoted TSV 입력, 후보 상태 검증, history·저장과 대화상자의 중복 적용 방지를 담당한다.
+
+`transitions`는 슬라이드 ID→`none|fade|push`, `animations`는 추가 개체 ID→`none|appear|fade`이며 누락된 필드는 빈 객체로 읽는다. `public/effects.js`가 발표 시 Web Animations로 재생하고 편집·정적 출력에서는 중지한다. `src/data-export.js`는 내장 Excel 데이터가 있는 네이티브 차트/표를 생성하고 테이블의 중복 개체 ID를 보정한다. `src/effects-export.js`는 이 보정 후 최종 XML의 이름·개체 ID에 효과를 연결한다. 여러 PPTX 개체로 분리된 그룹이나 그림의 배경은 명시적 `rootId`로 같은 효과를 받는다.
+
+`POST /api/import-pptx`는 PPTX 바이너리를 받아 `src/pptx-import.js`로 제한된 ZIP/XML을 파싱하고 변환 보고서만 반환한다. `?confirm=1`에서 같은 파일을 다시 검증한 후 자료를 생성한다. 임시 업로드 세션은 저장하지 않는다. `Store.create()`는 가져온 상태를 파일 기록 전에 검증하고 보고서를 메타데이터에 보존한다. 지원 범위와 정확한 자원 제한은 [6·7단계 안내](STAGE6_7_LINUX_DEPLOYMENT.md)에 정리한다.
+
 ## 파일 삭제의 보호 범위
 
 원본·이전 업로드 파일은 기본적으로 보호합니다. 이후 API로 추가한 이미지는 meta에 기록하며, 모든 revision과 HTML/CSS/JS/JSON 텍스트에서 사용을 검사합니다. 참조가 없는 추가 이미지에 한해 삭제를 허용합니다. 임의 JavaScript의 동적 동작을 완전히 정적 분석하는 시스템은 아니므로 직접 파일 구조를 바꾸는 고급 사용자는 별도 백업을 권장합니다.

@@ -1,4 +1,5 @@
 import { parseHTML } from "linkedom";
+import "../public/data-model.js";
 import { record, normalizeCode, codeIds, renderAuthoring } from "./authoring.js";
 import "../public/text-model.js";
 import "../public/object-model.js";
@@ -7,7 +8,7 @@ const { normalizeRichText, normalizeTextBox, renderRichText } = globalThis.SDTex
 const Objects = globalThis.SDObjects;
 const Slides = globalThis.SDSlides;
 // Keep states at the former 2 MB boundary editable after adding default fields.
-const stateSizeLimit = 2_000_000 + 1024;
+const stateSizeLimit = 2_000_000 + 1088;
 const tags = "h1,h2,h3,h4,p,li,td,th,img,blockquote,figcaption,code,span,div";
 const num = (x, min, max) =>
   typeof x === "number" && Number.isFinite(x) && x >= min && x <= max;
@@ -95,11 +96,13 @@ export function initialState(deck) {
     notes: {},
     slideLayouts: {},
     theme: Slides.normalizeTheme(),
+    transitions: {},
+    animations: {},
   };
   state.notes = initialNotes(deck, {}, state);
   return state;
 }
-const stateKeys = new Set(["schemaVersion", "order", "patches", "added", "clones", "scenes", "background", "slideCode", "masters", "slideMasters", "notes", "slideLayouts", "theme"]);
+const stateKeys = new Set(["schemaVersion", "order", "patches", "added", "clones", "scenes", "background", "slideCode", "masters", "slideMasters", "notes", "slideLayouts", "theme", "transitions", "animations"]);
 function strictRecord(value, label, allowed) {
   record(value, label);
   for (const key of Reflect.ownKeys(value)) {
@@ -113,6 +116,7 @@ export function migrateState(raw) {
   if (raw.schemaVersion !== undefined && raw.schemaVersion !== 1) throw new Error("지원하지 않는 편집 데이터 버전입니다.");
   if (Object.hasOwn(raw, "theme")) Slides.normalizeTheme(raw.theme);
   if (Object.hasOwn(raw, "notes")) strictRecord(raw.notes, "발표자 노트");
+  for (const key of ["transitions", "animations"]) if (Object.hasOwn(raw, key)) strictRecord(raw[key], "효과");
   if (Object.hasOwn(raw, "slideLayouts")) {
     strictRecord(raw.slideLayouts, "슬라이드 레이아웃");
     for (const layout of Object.values(raw.slideLayouts)) Slides.normalizeLayout(layout);
@@ -140,7 +144,7 @@ export function migrateState(raw) {
     }
   }
   state.schemaVersion = 1;
-  for (const key of ["clones", "scenes", "slideCode", "masters", "slideMasters", "notes", "slideLayouts"]) {
+  for (const key of ["clones", "scenes", "slideCode", "masters", "slideMasters", "notes", "slideLayouts", "transitions", "animations"]) {
     if (!Object.hasOwn(state, key)) state[key] = {};
     record(state[key], key);
   }
@@ -168,8 +172,12 @@ const patchKeys = new Set([
   "shape",
   "textMetricsScale",
   "inheritFontSize",
+  "table",
+  "chart",
 ]);
 function validateTextFields(patch) {
+  if (Object.hasOwn(patch, "table")) globalThis.SDData.normalizeTable(patch.table);
+  if (Object.hasOwn(patch, "chart")) globalThis.SDData.normalizeChart(patch.chart);
   if (Object.hasOwn(patch, "richText")) normalizeRichText(patch.richText);
   if (Object.hasOwn(patch, "textBox")) normalizeTextBox(patch.textBox);
   if (Object.hasOwn(patch, "image")) Objects.normalizeImage(patch.image);
@@ -180,6 +188,8 @@ function validPatch(p) {
   record(p, "편집 데이터");
   for (const [k, v] of Object.entries(p)) {
     if (!patchKeys.has(k)) throw new Error("허용되지 않는 편집 항목입니다.");
+    if (k === "table") p.table = globalThis.SDData.normalizeTable(v);
+    if (k === "chart") p.chart = globalThis.SDData.normalizeChart(v);
     if (k === "richText") p.richText = normalizeRichText(v);
     if (k === "textBox") p.textBox = normalizeTextBox(v);
     if (k === "image") p.image = Objects.normalizeImage(v);
@@ -259,7 +269,7 @@ export function validateState(raw, deck) {
       !/^a-[a-z0-9-]{1,50}$/.test(a.id) ||
       ids.has(a.id) ||
       !slideIds.has(a.slide) ||
-      !["text", "image", "shape", "html", "group"].includes(a.kind)
+      !["text", "image", "shape", "html", "group", "table", "chart"].includes(a.kind)
     )
       throw new Error("추가 요소 오류");
     ids.add(a.id);
@@ -276,6 +286,7 @@ export function validateState(raw, deck) {
     else if (Object.hasOwn(a, "group")) throw new Error("그룹 속성은 그룹 개체에서만 사용할 수 있습니다.");
     if (Object.hasOwn(p, "image") && kind !== "image" || Object.hasOwn(p, "shape") && kind !== "shape" || ["textMetricsScale", "inheritFontSize"].some(key => Object.hasOwn(p, key)) && kind !== "text") throw new Error("개체 종류와 편집 속성이 다릅니다.");
     validPatch(p);
+    for (const type of ["table", "chart"]) if (Object.hasOwn(p, type) && kind !== type) throw new Error("개체 종류와 데이터가 다릅니다.");
     Object.assign(a, p);
   }
   if (
@@ -288,6 +299,7 @@ export function validateState(raw, deck) {
     if (!ids.has(id)) throw new Error("알 수 없는 요소입니다.");
     validPatch(p);
     const added = state.added.find(item => item.id === id);
+    for (const type of ["table", "chart"]) if (Object.hasOwn(p, type) && added?.kind !== type) throw new Error("개체 종류와 데이터가 다릅니다.");
     if (Object.hasOwn(p, "image") && added?.kind !== "image" || Object.hasOwn(p, "shape") && added?.kind !== "shape" || ["textMetricsScale", "inheritFontSize"].some(key => Object.hasOwn(p, key)) && added?.kind !== "text") throw new Error("개체 종류와 편집 속성이 다릅니다.");
   }
   let total = 0;
@@ -295,6 +307,10 @@ export function validateState(raw, deck) {
   for (const a of state.added) {
     count(a);
     const effective = { ...a, ...(state.patches[a.id] || {}) };
+    if (["table", "chart"].includes(a.kind)) {
+      if (effective.rotate || ["text", "richText", "textBox", "src", "fontSize", "color", "fill", "image", "shape"].some(key => Object.hasOwn(effective, key))) throw new Error("표·차트는 데이터 편집을 이용해 주세요. 회전은 지원하지 않습니다.");
+      if (!Object.hasOwn(effective, a.kind)) throw new Error("표·차트 데이터가 필요합니다.");
+    }
     if (a.kind === "image") Objects.safeImageSource(effective.src);
     if (a.kind === "shape" && ["text", "richText", "textBox"].some(key => Object.hasOwn(effective, key))) throw new Error("도형 라벨은 텍스트 상자를 추가해 사용해 주세요.");
     if (a.kind === "group") {
@@ -303,6 +319,10 @@ export function validateState(raw, deck) {
     }
   }
   if (total > 500) throw new Error("그룹 내부를 포함한 추가 요소는 500개까지 사용할 수 있습니다.");
+  strictRecord(state.transitions, "슬라이드 전환");
+  strictRecord(state.animations, "개체 효과");
+  for (const [id, value] of Object.entries(state.transitions)) if (!slideIds.has(id) || !["none", "fade", "push"].includes(value)) throw new Error("슬라이드 전환 값 오류");
+  for (const [id, value] of Object.entries(state.animations)) if (!state.added.some(a => a.id === id) || !["none", "appear", "fade"].includes(value)) throw new Error("추가 개체 효과 값 오류");
   for (const [id, notes] of Object.entries(state.notes)) {
     if (!slideIds.has(id) || typeof notes !== "string" || notes.length > 20000)
       throw new Error("발표자 노트는 유효한 슬라이드의 20,000자 이내 텍스트여야 합니다.");
@@ -344,6 +364,8 @@ export function validateState(raw, deck) {
     notes: state.notes,
     slideLayouts: state.slideLayouts,
     theme: state.theme,
+    transitions: state.transitions,
+    animations: state.animations,
   };
 }
 export function applyPatch(e, p) {
@@ -446,6 +468,7 @@ export function renderDeck(html, state) {
     if (a.kind === "text" && !effective.inheritFontSize) e.style.fontSize = "48px";
     applyPatch(e, effective);
     if (["image", "shape", "group"].includes(a.kind)) Objects.applyVisual(e, effective);
+    if (["table", "chart"].includes(a.kind)) globalThis.SDData.render(e, effective);
     s.append(e);
   }
   for (const e of document.querySelectorAll("[data-sd-id]")) {

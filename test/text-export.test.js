@@ -22,6 +22,12 @@ async function nativeXml(value) {
   return { xml, document: new DOMParser().parseFromString(xml, "text/xml") };
 }
 function tags(node, name) { return Array.from(node.getElementsByTagName(name)); }
+test("measured browser line height exports as exact points to avoid cumulative font-metric drift", async () => {
+  const { document } = await nativeXml({...element,renderedLineHeights:[76.8],richText:{paragraphs:[{runs:[{text:'Measured',fontSize:64}],lineHeight:1.2}]}});
+  const spacing=tags(document,'a:lnSpc')[0];
+  assert.equal(tags(spacing,'a:spcPts')[0].getAttribute('val'),'3840');
+  assert.equal(tags(spacing,'a:spcPct').length,0);
+});
 
 test("PPTX preserves mixed runs, paragraph formatting and the displayed font scale", async () => {
   const { xml, document } = await nativeXml({

@@ -4,6 +4,7 @@ import JSZip from "jszip";
 import "../public/text-model.js";
 import "../public/object-model.js";
 import { canExportNativeText, pptxText } from "./text-export.js";
+import { addDataObject } from "./data-export.js";
 
 const Objects = globalThis.SDObjects;
 const number = value => typeof value === "number" && Number.isFinite(value);
@@ -125,6 +126,11 @@ export async function prepareNativeObjects(objects, context) {
       return { kind: "text", object: { ...object, groupChild } };
     }
     if (object.kind === "shape") return { kind: "shape", object, mapped: pptxShape(object, "prepared") };
+    if (["table", "chart"].includes(object.kind)) {
+      if (object.rotate || groupChild) throw new Error("표·차트 회전·그룹 출력은 지원하지 않습니다.");
+      globalThis.SDData[object.kind === "table" ? "normalizeTable" : "normalizeChart"](object[object.kind]);
+      return { kind: object.kind, object };
+    }
     if (object.kind === "image") {
       if (object.nativeObject) {
         const source = await sourceImage(object, context);
@@ -146,7 +152,7 @@ export async function prepareNativeObjects(objects, context) {
         ? await (async () => {
           if (object.unsupported || object.nativeSupported === false || !Array.isArray(object.children) || !object.children.length) throw new Error("그룹 원본이 필요합니다.");
           const children = [];
-          for (const child of object.children) children.push(await leaf(child, true));
+          for (const child of object.children) children.push(await leaf({ ...child, animationRootId: object.id }, true));
           return children;
         })()
         : [await leaf(object, false)];
@@ -168,14 +174,21 @@ export async function prepareNativeObjects(objects, context) {
   return { entries, hideIds };
 }
 
-export function addNativeObjects(slide, entries, textShapes, pictures) {
+export function addNativeObjects(slide, entries, textShapes, pictures, mappings = []) {
   for (const [index, entry] of entries.entries()) {
+    const mapping = name => ({ id: entry.object.id, rootId: entry.object.animationRootId || entry.object.id, name, kind: entry.kind });
     if (entry.kind === "text") {
       const mapped = pptxText(entry.object, `sd-native-text-${textShapes.length}`);
       if (entry.object.groupChild && /^#[\da-f]{6}$/i.test(entry.object.fill)) mapped.options.fill = { color: color(entry.object.fill) };
       slide.addText(mapped.runs, mapped.options); textShapes.push(mapped);
+      mappings.push(mapping(mapped.options.objectName));
     } else if (entry.kind === "shape") {
       slide.addShape(entry.mapped.type, { ...entry.mapped.options, objectName: `sd-native-shape-${index}` });
+      mappings.push(mapping(`sd-native-shape-${index}`));
+    } else if (["table", "chart"].includes(entry.kind)) {
+      const name = `sd-native-${entry.kind}-${index}`;
+      addDataObject(slide, entry.object, name);
+      mappings.push(mapping(name));
     } else {
       if (entry.object.nativeObject && /^#[\da-f]{6}$/i.test(entry.object.fill)) {
         const e = entry.object;
@@ -184,9 +197,11 @@ export function addNativeObjects(slide, entries, textShapes, pictures) {
           x: e.x / 144, y: e.y / 144, w: e.w / 144, h: e.h / 144, rotate: rotation(e.rotate),
           fill: { color: color(e.fill) }, line: { transparency: 100 },
         });
+        mappings.push(mapping(`sd-native-image-background-${pictures.length}`));
       }
       const mapped = { ...entry.mapped, options: { ...entry.mapped.options, objectName: `sd-native-image-${pictures.length}` } };
       slide.addImage(mapped.options); pictures.push(mapped);
+      mappings.push(mapping(mapped.options.objectName));
     }
   }
 }

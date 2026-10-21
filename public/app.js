@@ -112,7 +112,7 @@ async function settleEditing() {
   await objectWork;
 }
 function transitionTools() {
-  for (const id of ["sceneValue", "backgroundValue", "undoBtn", "redoBtn", "addSlideBtn", "removeSlideBtn", "duplicateSlideBtn", "upSlideBtn", "downSlideBtn", "layoutBtn", "themeBtn", "notesValue"]) $(id).disabled = transitionBusy;
+  for (const id of ["sceneValue", "backgroundValue", "undoBtn", "redoBtn", "addSlideBtn", "removeSlideBtn", "duplicateSlideBtn", "upSlideBtn", "downSlideBtn", "layoutBtn", "themeBtn", "notesValue", "addTableBtn", "addChartBtn", "effectsBtn"]) $(id).disabled = transitionBusy;
   $("slideList").querySelectorAll("button").forEach(button => { button.disabled = transitionBusy; });
 }
 function transitionAction(fn, processingStatus) {
@@ -342,7 +342,8 @@ function properties() {
   if (!s) return;
   $("precisionNote").textContent = objectLocked(s.id) ? "잠긴 개체입니다. 레이어 목록에서 잠금을 해제하세요." : s.precisionReason || "";
   $("precisionNote").hidden = !$("precisionNote").textContent;
-  $("textField").hidden = s.tag === "img" || ["image", "shape", "group"].includes(s.kind);
+  $("textField").hidden = s.tag === "img" || ["image", "shape", "group", "table", "chart"].includes(s.kind);
+  $("rotateValue").disabled ||= ["table", "chart"].includes(s.kind);
   $("replaceImageBtn").hidden = s.tag !== "img";
   $("textValue").value = s.text;
   for (const [id, key] of [
@@ -356,7 +357,7 @@ function properties() {
     $(id).value = s[key] ?? 0;
 }
 function nativeAdded(id) {
-  return state?.added.find(a => a.id === id && a.slide === state.order[index] && ["text", "image", "shape", "group"].includes(a.kind));
+  return state?.added.find(a => a.id === id && a.slide === state.order[index] && ["text", "image", "shape", "group", "table", "chart"].includes(a.kind));
 }
 function visualProperties() {
   const s = selected, native = s && nativeAdded(s.id);
@@ -365,7 +366,8 @@ function visualProperties() {
   $("shapeTools").hidden = !shape;
   $("groupNote").hidden = !group;
   $("originalImageNote").hidden = !s || s.tag !== "img" || image;
-  $("fillField").hidden = !!(shape || group);
+  $("fillField").hidden = !!(shape || group || ["table", "chart"].includes(native?.kind));
+  if ($("editDataBtn")) $("editDataBtn").hidden = !["table", "chart"].includes(native?.kind);
   if (group) { $("lockAspect").checked = true; $("lockAspect").disabled = true; }
   if (shape || group) $("textUnavailableNote").hidden = true;
   const disabled = !s || objectLocked(s.id) || objectBusy || !frameReady;
@@ -619,6 +621,7 @@ function receiveObjects(operation, objects, context = objectContext()) {
     for (const object of objects) {
       if (!object || typeof object !== "object" || Array.isArray(object)) throw new Error("복사할 개체 정보를 확인해 주세요.");
       const copy = { ...clone(object), id: uid("a"), slide: context.slide };
+      if (copy.animation) { candidate.animations[copy.id] = copy.animation; delete copy.animation; }
       if (operation !== "copy") { copy.x = (copy.x ?? 0) + 24; copy.y = (copy.y ?? 0) + 24; }
       ids.push(copy.id);
       candidate.added.push(copy);
@@ -627,7 +630,7 @@ function receiveObjects(operation, objects, context = objectContext()) {
     if (!validated) return;
     if (operation === "copy") {
       objectClipboard = { deckId: context.deckId, objects: validated.added.filter(item => ids.includes(item.id)).map(item => {
-        const copy = clone(item); delete copy.id; delete copy.slide; return copy;
+        const copy = clone(item); if (validated.animations[item.id]) copy.animation = validated.animations[item.id]; delete copy.id; delete copy.slide; return copy;
       }) };
       toast(`${objects.length}개 개체를 복사했습니다. 이 자료의 다른 슬라이드에도 붙여넣을 수 있습니다.`);
       return;
@@ -654,14 +657,18 @@ function receiveStructure(operation, removeIds, objects) {
     const sourceLayers = layerItems.filter(item => removeIds.includes(item.id));
     if (sourceLayers.length !== removeIds.length || new Set(sourceLayers.map(item => item.group)).size !== 1 || sourceLayers.some(item => item.hidden || !item.layerable)) return;
     const candidate = clone(state), ids = [], replacements = [];
+    const effects = new Set(removeIds.map(id => candidate.animations[id] || "none"));
+    if (operation === "group" && effects.size > 1) throw new Error("서로 다른 진입 효과가 있습니다. 효과를 같게 맞춘 뒤 그룹으로 묶어 주세요.");
+    const effect = [...effects][0];
     const orderedObjects = operation === "ungroup" ? [...objects].sort((a, b) => (a.z ?? 20) - (b.z ?? 20)) : objects;
     for (const snapshot of orderedObjects) {
       if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot) || !["text", "image", "shape", "group"].includes(snapshot.kind)) throw new Error("그룹 개체 정보를 확인해 주세요.");
       const object = { ...clone(snapshot), id: uid("a"), slide: context.slide };
       ids.push(object.id); replacements.push(object);
+      if (effect !== "none") candidate.animations[object.id] = effect;
     }
     candidate.added = candidate.added.filter(a => !removeIds.includes(a.id));
-    for (const id of removeIds) delete candidate.patches[id];
+    for (const id of removeIds) { delete candidate.patches[id]; delete candidate.animations[id]; }
     detachPlaceholders(candidate, removeIds);
     candidate.added.push(...replacements);
     // Keep the group's position at its highest source; expand children in place.

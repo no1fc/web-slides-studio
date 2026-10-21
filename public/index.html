@@ -9,9 +9,11 @@
     <script defer src="/text-model.js"></script>
     <script defer src="/object-model.js"></script>
     <script defer src="/slide-model.js"></script>
+    <script defer src="/data-model.js"></script>
     <script defer src="/app.js"></script>
     <script defer src="/authoring-ui.js"></script>
     <script defer src="/slide-ui.js"></script>
+    <script defer src="/data-ui.js"></script>
   </head>
   <body>
     <div id="toast" role="status" hidden></div>
@@ -84,7 +86,7 @@
             </p>
             <div class="actions">
               <button id="emptyUpload" class="primary">ZIP 파일 올리기</button
-              ><button id="folderBtn">폴더 선택</button>
+              ><button id="folderBtn">폴더 선택</button><button id="pptxImportBtn">PPTX 가져오기</button>
             </div>
             <small>ZIP 최대 40MB · 압축 해제 64MB · 300개 파일</small>
           </div>
@@ -111,7 +113,7 @@
           ><button id="codeBtn">HTML/CSS</button
           ><button id="jsonBtn">JSON</button
           ><button id="masterBtn">마스터</button
-          ><button id="layoutBtn">레이아웃</button
+          ><button id="effectsBtn">전환·효과</button><button id="layoutBtn">레이아웃</button
           ><button id="themeBtn">테마</button
           ><button id="filesBtn">파일 관리</button
           ><button id="versionsBtn">버전</button
@@ -180,7 +182,7 @@
             <div class="add-tools">
               <button id="addTextBtn">T 글</button
               ><button id="addImageBtn">▧ 이미지</button
-              ><button id="addShapeBtn">□ 도형</button>
+              ><button id="addShapeBtn">□ 도형</button><button id="addTableBtn">▦ 표</button><button id="addChartBtn">▥ 차트</button>
             </div>
             <section class="arrangement-panel" aria-label="선택과 배치">
               <div class="panel-heading"><h3>개체 배치</h3><span id="selectionCount" aria-live="polite">선택 없음</span></div>
@@ -229,6 +231,7 @@
               <p id="selectionHelp">슬라이드의 글이나 이미지를<br />클릭해 보세요.</p>
             </div>
             <div id="properties" hidden>
+              <button id="editDataBtn" hidden>표·차트 데이터 편집</button>
               <p id="precisionNote" class="precision-note" hidden></p>
               <label id="textField"
                 >내용<textarea id="textValue" rows="5"></textarea></label
@@ -360,7 +363,7 @@
         </div>
       </section>
     </div>
-    <input id="zipInput" type="file" accept=".zip" hidden /><input
+    <input id="pptxInput" type="file" accept=".pptx" hidden /><input id="zipInput" type="file" accept=".zip" hidden /><input
       id="folderInput"
       type="file"
       webkitdirectory

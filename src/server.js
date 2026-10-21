@@ -229,6 +229,16 @@ export async function startStudio(opts = {}) {
           send(res, 201, expose(await store.create(input)));
           return;
         }
+        if (url.pathname === "/api/import-pptx" && req.method === "POST") {
+          const { importPptx } = await import("./pptx-import.js");
+          const input = await importPptx(await body(req, 40 * 1024 * 1024));
+          // Preview and confirmation both parse the supplied file. No temporary
+          // public asset store or unbounded server-side upload session is needed.
+          input.state = validateState(input.state, input);
+          if (url.searchParams.get("confirm") !== "1") send(res, 200, input.report);
+          else send(res, 201, expose(await store.create(input)));
+          return;
+        }
         if (url.pathname === "/api/new" && req.method === "POST") {
           const html =
             '<!doctype html><html lang="ko"><head><title>새 발표 자료</title><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{margin:0;background:#101c27;color:#fff;font-family:Arial,sans-serif}main{position:relative;width:1920px;height:1080px;transform-origin:0 0}.slide{position:absolute;inset:0;padding:100px;box-sizing:border-box;display:none}.slide.active{display:block}h1{font-size:96px}p{font-size:36px}</style></head><body><main id="stage"><section class="slide active"><h1>새로운 이야기를 시작하세요</h1><p>글과 이미지를 선택해 나만의 발표 자료로 만드세요.</p></section></main></body></html>';
@@ -522,7 +532,7 @@ export async function startStudio(opts = {}) {
         return;
       }
       const p = url.pathname === "/" ? "index.html" : url.pathname.slice(1);
-      if (!["index.html", "style.css", "app.js", "authoring-ui.js", "slide-ui.js", "slide-model.js", "jszip.min.js", "text-model.js", "object-model.js"].includes(p)) {
+      if (!["index.html", "style.css", "app.js", "authoring-ui.js", "slide-ui.js", "slide-model.js", "data-ui.js", "data-model.js", "jszip.min.js", "text-model.js", "object-model.js"].includes(p)) {
         send(res, 404, { error: "페이지를 찾을 수 없습니다." });
         return;
       }
@@ -552,7 +562,7 @@ export async function startStudio(opts = {}) {
         return;
       }
       const url = new URL(req.url, contentOrigin);
-      if (["/_studio/bridge.js", "/_studio/text-model.js", "/_studio/text-editor.js", "/_studio/object-model.js"].includes(url.pathname)) {
+      if (["/_studio/bridge.js", "/_studio/text-model.js", "/_studio/text-editor.js", "/_studio/object-model.js", "/_studio/data-model.js", "/_studio/effects.js"].includes(url.pathname)) {
         send(
           res,
           200,
@@ -619,7 +629,7 @@ export async function startStudio(opts = {}) {
           .replace(/<head([^>]*)>/i, "<head$1>" + bootstrap)
           .replace(
             /<\/body>/i,
-            `<script id="sd-config" type="application/json">${enc(config)}</script><script src="/_studio/text-model.js"></script><script src="/_studio/text-editor.js"></script><script src="/_studio/object-model.js"></script><script src="/_studio/bridge.js"></script></body>`,
+            `<script id="sd-config" type="application/json">${enc(config)}</script><script src="/_studio/text-model.js"></script><script src="/_studio/text-editor.js"></script><script src="/_studio/object-model.js"></script><script src="/_studio/data-model.js"></script><script src="/_studio/effects.js"></script><script src="/_studio/bridge.js"></script></body>`,
           );
         send(res, 200, html, "text/html; charset=utf-8");
         return;

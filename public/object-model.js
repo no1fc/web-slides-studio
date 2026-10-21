@@ -206,7 +206,13 @@
       else if (shape.type === "ellipse") { attr("cx", width / 2); attr("cy", height / 2); attr("rx", Math.max(0, width / 2 - inset)); attr("ry", Math.max(0, height / 2 - inset)); }
       else {
         const right = width - inset, mid = height / 2, head = Math.min(width / 2, Math.max(8, shape.strokeWidth * 3)), half = Math.min(Math.max(0, height / 2 - inset), head / 2);
-        attr("d", `M ${inset} ${mid} L ${right} ${mid}` + (shape.type === "arrow" ? ` M ${right - head} ${mid - half} L ${right} ${mid} L ${right - head} ${mid + half}` : ""));
+        attr("d", `M ${inset} ${mid} L ${right} ${mid}`);
+        if (shape.type === "arrow") {
+          const tip=document.createElementNS(ns,"path");
+          tip.setAttribute("d",`M ${right-head} ${mid-half} L ${right} ${mid} L ${right-head} ${mid+half}`);
+          for(const [key,value] of Object.entries({fill:"none",stroke:shape.stroke,"stroke-width":shape.strokeWidth,"stroke-linejoin":"round"})) tip.setAttribute(key,String(value));
+          svg.append(tip);
+        }
       }
       attr("fill", ["line", "arrow"].includes(shape.type) ? "none" : shape.fill); attr("stroke", shape.stroke); attr("stroke-width", shape.strokeWidth);
       attr("stroke-linejoin", "round");

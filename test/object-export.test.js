@@ -13,6 +13,15 @@ const crop = { left: 0.1, top: 0.2, right: 0.3, bottom: 0.1 };
 const image = { id: "a-image", kind: "image", nativeObject: true, src: "assets/original.png", x: 144, y: 288, w: 432, h: 216, rotate: 30, naturalWidth: 1000, naturalHeight: 500, image: { mode: "stretch", crop } };
 const tags = (node, name) => [...node.getElementsByTagName(name)];
 async function api() { return import("../src/object-export.js"); }
+test("image fill and picture share the same entrance animation target root", async () => {
+  const {addNativeObjects}=await api(),ppt=new pptxgen(),mappings=[];
+  addNativeObjects(ppt.addSlide(),[{kind:'image',object:{...image,fill:'#ffffff'},mapped:{options:{data:'image/png;base64,'+pixel.toString('base64'),x:1,y:1,w:3,h:2}}}],[],[],mappings);
+  assert.equal(mappings.length,2);assert.deepEqual(mappings.map(m=>m.rootId),['a-image','a-image']);
+  const {finalizeEffectsPptx}=await import('../src/effects-export.js');
+  const bytes=await finalizeEffectsPptx(await ppt.write({outputType:'nodebuffer'}),{order:['s0'],animations:{'a-image':'fade'}},[mappings]);
+  const xml=await(await JSZip.loadAsync(bytes)).file('ppt/slides/slide1.xml').async('string');
+  assert.equal(new Set([...xml.matchAll(/<p:spTgt spid="(\d+)"/g)].map(m=>m[1])).size,2);
+});
 async function fixture(fn) {
   const root = await mkdtemp(join(tmpdir(), "studio-native-objects-"));
   try { await mkdir(join(root, "assets")); await writeFile(join(root, "assets/original.png"), pixel); await fn({ root, url: "http://localhost:1234/v/d/token/index.html", contentOrigin: "http://localhost:1234" }); }

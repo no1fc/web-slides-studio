@@ -16,6 +16,13 @@ const shape = (extra = {}) => ({ kind: "shape", x: 100, y: 100, w: 200, h: 100, 
 const image = (extra = {}) => ({ kind: "image", src: "photo.png", x: 500, y: 200, w: 300, h: 100, image: { mode: "fill", crop: { left: .1, right: .2, top: .05, bottom: .15 } }, ...extra });
 const stateWith = (...objects) => ({ ...initialState(input), added: objects.map((o, n) => ({ ...o, id: `a-${n}`, slide: "s0" })) });
 const near = (a, b) => assert.ok(Math.abs(a - b) < .001, `${a} ~= ${b}`);
+test("dashed arrowheads remain solid and complete in the browser renderer", () => {
+  const {document}=parseHTML('<html><body></body></html>');
+  const object=shape({shape:{type:'arrow',fill:'none',stroke:'#123456',strokeWidth:8,dash:'dash'}});
+  const node=O.createElement(document,object),paths=[...node.querySelectorAll('path')];
+  assert.equal(paths.length,2);assert.equal(paths.filter(p=>p.hasAttribute('stroke-dasharray')).length,1);
+  assert.equal(paths.find(p=>!p.hasAttribute('stroke-dasharray')).getAttribute('d').match(/L/g).length,2);
+});
 
 test("image crop normalization preserves local sources and rejects unsafe or malformed data", () => {
   assert.deepEqual(O.normalizeImage(), { mode: "stretch", crop: { left: 0, top: 0, right: 0, bottom: 0 } });

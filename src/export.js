@@ -7,9 +7,12 @@ import pptxgen from "pptxgenjs";
 import { renderDeck } from "./deck.js";
 import { collectFiles } from "./files.js";
 import { finalizeTextPptx } from "./text-export.js";
+import { finalizeEffectsPptx } from "./effects-export.js";
+import { finalizeDataPptx } from "./data-export.js";
 import { prepareNativeObjects, addNativeObjects, finalizeObjectPptx } from "./object-export.js";
 const publicDir = new URL("../public/", import.meta.url);
 export async function exportDeck({ store, deck, format, url, contentOrigin }) {
+  const effectMappings = [];
   const root = store.path(deck.id, "assets");
   if (format === "html") {
     const zip = new JSZip();
@@ -32,10 +35,10 @@ export async function exportDeck({ store, deck, format, url, contentOrigin }) {
       .replace(/<head([^>]*)>/i, "<head$1>" + bootstrap)
       .replace(
         /<\/body>/i,
-        `<script id="sd-config" type="application/json">${config}</script><script src="assets/studio-object-model.js"></script><script src="assets/studio-text-model.js"></script><script src="assets/studio-text-editor.js"></script><script src="assets/studio-viewer.js"></script></body>`,
+        `<script id="sd-config" type="application/json">${config}</script><script src="assets/studio-object-model.js"></script><script src="assets/studio-data-model.js"></script><script src="assets/studio-effects.js"></script><script src="assets/studio-text-model.js"></script><script src="assets/studio-text-editor.js"></script><script src="assets/studio-viewer.js"></script></body>`,
       );
     zip.file("index.html", html);
-    for (const [source, target] of [["object-model.js", "studio-object-model.js"], ["text-model.js", "studio-text-model.js"], ["text-editor.js", "studio-text-editor.js"], ["bridge.js", "studio-viewer.js"]]) {
+    for (const [source, target] of [["data-model.js", "studio-data-model.js"], ["effects.js", "studio-effects.js"], ["object-model.js", "studio-object-model.js"], ["text-model.js", "studio-text-model.js"], ["text-editor.js", "studio-text-editor.js"], ["bridge.js", "studio-viewer.js"]]) {
       zip.file("assets/" + target, await readFile(new URL(source, publicDir)));
     }
     zip.file(
@@ -78,7 +81,7 @@ export async function exportDeck({ store, deck, format, url, contentOrigin }) {
       const allowed =
         u.origin === contentOrigin &&
         (u.pathname.startsWith(prefix) ||
-          ["/_studio/bridge.js", "/_studio/object-model.js", "/_studio/text-model.js", "/_studio/text-editor.js"].includes(u.pathname)) &&
+          ["/_studio/bridge.js", "/_studio/object-model.js", "/_studio/text-model.js", "/_studio/text-editor.js", "/_studio/data-model.js", "/_studio/effects.js"].includes(u.pathname)) &&
         route.request().method() === "GET";
       return allowed ? route.continue() : route.abort("blockedbyclient");
     });
@@ -153,10 +156,13 @@ export async function exportDeck({ store, deck, format, url, contentOrigin }) {
         w: 13.333333,
         h: 7.5,
       });
-      addNativeObjects(slide, prepared.entries, nativeTextShapes, nativePictures);
+      const mapping = []; effectMappings.push(mapping);
+      addNativeObjects(slide, prepared.entries, nativeTextShapes, nativePictures, mapping);
+      const skippedEffects = deck.state.added.filter(a => a.slide === deck.state.order[i] && ["appear", "fade"].includes(deck.state.animations?.[a.id]) && !mapping.some(m => m.id === a.id || m.id.startsWith(a.id + "--")));
       const note = deck.state.notes?.[deck.state.order[i]] ?? deck.sourceNotes?.[deck.state.order[i]] ?? "";
       const provenance = `SDLAB Slides · 저장 버전 ${deck.revision} · ${i + 1}/${count}\n웹의 3D 배경은 정지 화면입니다. 편집 모드는 글꼴 및 줄바꿈 차이가 있을 수 있습니다.`;
-      slide.addNotes(note ? `${note}\n\n${provenance}` : provenance);
+      const warning = skippedEffects.length ? `\n호환성 알림: 배경 이미지에 포함된 개체 ${skippedEffects.length}개의 진입 효과는 적용하지 않았습니다.` : "";
+      slide.addNotes((note ? `${note}\n\n${provenance}` : provenance) + warning);
       if (format === "pptx-editable")
         await page.evaluate(() => window.__sd.showNative());
     }
@@ -167,7 +173,7 @@ export async function exportDeck({ store, deck, format, url, contentOrigin }) {
         extension: "pdf",
       };
     return {
-      buffer: await finalizeObjectPptx(await finalizeTextPptx(await ppt.write({ outputType: "nodebuffer" }), nativeTextSlides), nativePictureSlides),
+      buffer: await finalizeEffectsPptx(await finalizeDataPptx(await finalizeObjectPptx(await finalizeTextPptx(await ppt.write({ outputType: "nodebuffer" }), nativeTextSlides), nativePictureSlides)), deck.state, effectMappings),
       mime: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
       extension: "pptx",
     };

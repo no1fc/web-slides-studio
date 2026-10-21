@@ -5,6 +5,7 @@
   );
   const edit = config.edit === true;
   const slides = [...document.querySelectorAll("[data-sd-slide]")];
+  const effects = globalThis.SDEffects?.attach(config, slides, edit);
   let current = 0,
     selected = null,
     selection = [],
@@ -96,6 +97,7 @@
     if (!overlay) return;
     if (!selected || textEdit || !selected.isConnected || selection.some(e => locked(e) || !visible(e))) { overlay.hidden = true; return; }
     for (const button of overlay.children) button.style.display = selection.length > 1 ? "none" : "block";
+    if (["table", "chart"].includes(effective(selected.dataset.sdId).kind)) overlay.querySelector('[data-sd-handle="rotate"]').style.display = "none";
     if (selection.length > 1) {
       const b = bounds(selection);
       overlay.hidden = false;
@@ -129,6 +131,7 @@
     Objects.refresh(slides[current]);
     for (const el of slides[current]?.querySelectorAll('[data-sd-rich="true"]') || []) TextEditor.fit(el);
     tell("navigate", { index: current });
+    effects?.play(current);
     report();
   }
   const hex = (c) => {
@@ -151,9 +154,9 @@
     return !effective(e.dataset.sdId).hidden && c.display !== "none" && c.visibility !== "hidden" && r.width > 0 && r.height > 0 && !e.closest(".notes");
   };
   const editableElements = () => [...(slides[current]?.querySelectorAll("[data-sd-id]") || [])];
-  const nativeKinds = new Set(["text", "image", "shape", "group"]);
+  const nativeKinds = new Set(["text", "image", "shape", "group", "table", "chart"]);
   const nativeAdded = e => nativeKinds.has(added.get(e.dataset.sdId)?.kind);
-  const groupable = e => nativeAdded(e) && !locked(e) && visible(e) && !geometry(e).reason && e.parentElement === slides[current];
+  const groupable = e => nativeAdded(e) && !["table", "chart"].includes(effective(e.dataset.sdId).kind) && !locked(e) && visible(e) && !geometry(e).reason && e.parentElement === slides[current];
   const paintOrder = elements => elements.map((el, index) => ({ el, index, z: parseInt(getComputedStyle(el).zIndex) || 0 }))
     .sort((a, b) => a.z - b.z || a.index - b.index).map(item => item.el);
   function bounds(elements) {
@@ -268,6 +271,7 @@
       Objects.applyVisual(e, q);
       Objects.refresh(e);
     }
+    if (["table", "chart"].includes(q.kind)) globalThis.SDData.render(e, q);
   }
   function finishText() {
     if (!textEdit) return;
@@ -367,6 +371,7 @@
       if (d.before === undefined) delete patches[d.id];
       else patches[d.id] = d.before;
       d.el.style.cssText = d.cssText;
+      if (["table", "chart"].includes(effective(d.id).kind)) globalThis.SDData.render(d.el, effective(d.id));
       if (["image", "shape", "group"].includes(effective(d.id).kind)) {
         Objects.applyVisual(d.el, effective(d.id));
         Objects.refresh(d.el);
@@ -543,7 +548,7 @@
     if (g.reason) throw new Error("이 CSS 변환 개체는 복제할 수 없습니다. HTML/CSS 편집을 이용해 주세요.");
     return { x: round((g.cx - slide.left) / ss - g.bw / 2), y: round((g.cy - slide.top) / ss - g.bh / 2), w: round(g.bw), h: round(g.bh), rotate: round(g.angle) };
   }
-  function snapshotObject(source) {
+  function snapshotObject(source, includeAnimation = false) {
     const box = objectBox(source), p = effective(source.dataset.sdId);
     if (nativeAdded(source)) {
       const copy = structuredClone(p);
@@ -559,6 +564,7 @@
       }
       if (copy.kind === "image") copy.image = Objects.normalizeImage(copy.image || {});
       if (copy.kind === "shape") copy.shape = Objects.normalizeShape(copy.shape || {}, copy.fill);
+      if (includeAnimation === true && config.state?.animations?.[source.dataset.sdId]) copy.animation = config.state.animations[source.dataset.sdId];
       return copy;
     }
     if (source.tagName === "IMG") {
@@ -620,7 +626,7 @@
         select(null);
       }
       if (["duplicate", "copy"].includes(name)) {
-        const objects = paintOrder(editableElements().filter(e => selection.includes(e))).map(snapshotObject);
+        const objects = paintOrder(editableElements().filter(e => selection.includes(e))).map(e => snapshotObject(e, true));
         tell("objects", { operation: name, slide: slides[current].dataset.sdSlide, objects });
       }
     } catch (error) { tell("notice", { message: error.message }); }
@@ -959,15 +965,30 @@
         naturalWidth: source?.naturalWidth, naturalHeight: source?.naturalHeight, image: Objects.normalizeImage(world.image || {}), fill };
     }
     if (world.kind === "shape") return { ...base, shape: Objects.normalizeShape(world.shape || {}, world.fill) };
+    if (["table", "chart"].includes(world.kind)) {
+      if (world.kind === "table") {
+        const cells=[...element.querySelectorAll('td,th')];
+        if (world.h/world.table.rows.length < world.table.fontSize*1.3+18 || cells.some(cell=>{
+          const text=cell.firstElementChild;return text && (text.scrollHeight>text.clientHeight+1 || text.scrollWidth>text.clientWidth+1);
+        })) base.nativeSupported=false;
+      }
+      return { ...base, [world.kind]: world[world.kind] };
+    }
     if (world.kind !== "text" || !TextEditor.eligible(element)) return { ...base, nativeSupported: false };
     try {
       const richText = TextEditor.resolve(element);
+      const blocks=[...element.querySelectorAll('[data-sd-paragraph]')];
+      const renderedLineHeights=richText.paragraphs.map((paragraph,index)=>{
+        const block=blocks[index];if(!block)return null;
+        const heights=[block,...block.querySelectorAll('[data-sd-run]')].map(node=>parseFloat(getComputedStyle(node).lineHeight)).filter(Number.isFinite);
+        return heights.length?Math.max(...heights)*factor*(Number(element.dataset.sdFontScale)||1):null;
+      });
       for (const paragraph of richText.paragraphs) {
         if (paragraph.spaceAfter !== undefined) paragraph.spaceAfter *= factor;
         for (const run of paragraph.runs) if (run.fontSize !== undefined) run.fontSize *= factor;
       }
       return { ...base,
-        text: Text.plainText(richText), richText, textBox: TextEditor.box(element),
+        text: Text.plainText(richText), richText, renderedLineHeights, textBox: TextEditor.box(element),
         fontScale: Number(element.dataset.sdFontScale) || 1,
         textMetricsScale: (Number(element.dataset.sdTextMetricsScale) || 1) * factor,
         textOverflowing: element.dataset.sdTextOverflowing === "true",
@@ -1052,7 +1073,7 @@
       css.textContent = ids.map(id => {
         const selector = `[data-sd-id="${CSS.escape(id)}"]`;
         const node = document.querySelector(selector);
-        if (["image", "shape", "group"].includes(node?.dataset.sdKind)) return `${selector},${selector} *{visibility:hidden!important}`;
+        if (["image", "shape", "group", "table", "chart"].includes(node?.dataset.sdKind)) return `${selector},${selector} *{visibility:hidden!important}`;
         return `${selector},${selector} *{color:transparent!important;-webkit-text-fill-color:transparent!important;text-shadow:none!important}img${selector}{visibility:hidden!important}`;
       }).join("\n");
       document.head.append(css);
@@ -1061,6 +1082,7 @@
       document.getElementById("sd-hide-native")?.remove();
     },
     clean() {
+      effects?.stop();
       select(null);
       const s = document.createElement("style");
       s.textContent = "#hud,#help,#progress,#notes{display:none!important}";

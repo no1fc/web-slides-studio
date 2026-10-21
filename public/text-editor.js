@@ -9,7 +9,7 @@
     return rgb?.length >= 3 ? "#" + rgb.slice(0, 3).map(n => Math.round(Number(n)).toString(16).padStart(2, "0")).join("") : "#000000";
   };
   function eligible(el) {
-    return !!el && !["group", "image", "shape"].includes(el.dataset.sdKind) && !["IMG", "SVG", "CANVAS", "VIDEO", "IFRAME", "INPUT", "TEXTAREA", "BUTTON", "SELECT"].includes(el.tagName) &&
+    return !!el && !["group", "image", "shape", "table", "chart"].includes(el.dataset.sdKind) && !["IMG", "SVG", "CANVAS", "VIDEO", "IFRAME", "INPUT", "TEXTAREA", "BUTTON", "SELECT"].includes(el.tagName) &&
       !el.querySelector("[data-sd-id],img,svg,canvas,video,audio,iframe,input,textarea,button,select,table,script,style");
   }
   function themeReference(node, root, property, attribute, choices, pattern) {

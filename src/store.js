@@ -40,6 +40,7 @@ export class Store {
     }
   }
   async create(input) {
+    const state = input.state === undefined ? initialState(input) : validateState(input.state, input);
     const id = randomUUID();
     const dir = this.path(id);
     await mkdir(join(dir, "revisions"), { recursive: true });
@@ -63,9 +64,10 @@ export class Store {
       previewToken: randomBytes(24).toString("hex"),
       shareToken: null,
       publishedRevision: null,
+      ...(input.report ? { importReport: input.report } : {}),
     };
     await this.atomic(join(dir, "revisions/1.json"), {
-      state: initialState(input),
+      state,
       savedAt: now,
     });
     await this.atomic(join(dir, "meta.json"), meta);

@@ -39,7 +39,11 @@ export function pptxText(element, objectName) {
     const bullet = list === "number"
       ? `<a:buAutoNum type="arabicPeriod" startAt="${counters[indent]}"/>`
       : list === "bullet" ? '<a:buChar char="&#x2022;"/>' : "<a:buNone/>";
-    paragraphXml.push(`<a:pPr algn="${({ left: "l", center: "ctr", right: "r", justify: "just" })[align] || "l"}" lvl="${indent}" marL="${emu(left)}" indent="${list === "none" ? 0 : -emu(12 * scale * metricsScale)}"><a:lnSpc><a:spcPct val="${Math.round(lineHeight * 100000)}"/></a:lnSpc><a:spcAft><a:spcPts val="${Math.round(after * 100)}"/></a:spcAft>${bullet}</a:pPr>`);
+    const renderedLineHeight = element.renderedLineHeights?.[index];
+    const spacing = Number.isFinite(renderedLineHeight) && renderedLineHeight > 0
+      ? `<a:spcPts val="${Math.round(points(renderedLineHeight) * 100)}"/>`
+      : `<a:spcPct val="${Math.round(lineHeight * 100000)}"/>`;
+    paragraphXml.push(`<a:pPr algn="${({ left: "l", center: "ctr", right: "r", justify: "just" })[align] || "l"}" lvl="${indent}" marL="${emu(left)}" indent="${list === "none" ? 0 : -emu(12 * scale * metricsScale)}"><a:lnSpc>${spacing}</a:lnSpc><a:spcAft><a:spcPts val="${Math.round(after * 100)}"/></a:spcAft>${bullet}</a:pPr>`);
     paragraphSizes.push(Math.max(...sourceRuns.map(run => fontSize(run.fontSize))));
     for (const [runIndex, run] of sourceRuns.entries()) {
       const lines = run.text.split(/\r\n?|\n/);
