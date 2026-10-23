@@ -4,6 +4,7 @@ import { join, extname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomBytes, scryptSync, timingSafeEqual, createHash } from "node:crypto";
 import { Workflows } from "./workflows.js";
+import { Feedback } from "./feedback.js";
 import { withoutNotesHtml, withoutNotesDeck, redactNoteText } from "./notes-policy.js";
 import { Store } from "./store.js";
 import { PasswordStore } from "./auth.js";
@@ -77,6 +78,7 @@ export async function startStudio(opts = {}) {
   const store = new Store(resolve(opts.root || join(base, "data")));
   await store.init();
   const workflows = new Workflows(store);
+  const feedback = new Feedback(store);
   const shareSessions = new Map();
   const auth = new PasswordStore(store);
   await auth.init(password);
@@ -247,7 +249,7 @@ export async function startStudio(opts = {}) {
             await store.atomic(file,{version:b.version,client:['codex','claude','unknown'].includes(b.client)?b.client:'unknown',platform:['win32','darwin','linux','unknown'].includes(b.platform)?b.platform:'unknown',checks,reportedAt:new Date().toISOString()});
           } else if(req.method !== 'GET') { send(res,405,{error:'지원하지 않는 요청'}); return; }
           let report=null;try{report=JSON.parse(await readFile(file,'utf8'));}catch(e){if(e.code!=='ENOENT')throw e;}
-          send(res,200,{report,minimumVersion:'0.3.0'});return;
+          send(res,200,{report,minimumVersion:'0.4.0'});return;
         }
         if(url.pathname==='/api/import/check' && req.method==='POST') {
           const input=await importArchive(await body(req,40*1024*1024));send(res,200,{slides:input.slides.length,files:input.files.size,title:input.title});return;
@@ -266,6 +268,15 @@ export async function startStudio(opts = {}) {
         }
         const brand=/^\/api\/brands\/([a-f0-9-]{36})\/apply$/.exec(url.pathname);
         if(brand&&req.method==='POST'){send(res,200,expose(await workflows.applyBrand(brand[1],await json(req))));return;}
+        const feedbackRoute = /^\/api\/decks\/([a-f0-9-]{36})\/feedback(?:\/([a-f0-9-]{36}))?$/.exec(url.pathname);
+        if (feedbackRoute) {
+          const [, id, feedbackId] = feedbackRoute;
+          if (!feedbackId && req.method === 'GET') send(res, 200, await feedback.list(id));
+          else if (!feedbackId && req.method === 'POST') send(res, 201, await feedback.create(id, await json(req)));
+          else if (feedbackId && req.method === 'PATCH') send(res, 200, await feedback.update(id, feedbackId, await json(req)));
+          else send(res, 405, { error: '수정 요청은 추가하거나 처리 상태를 변경할 수 있습니다.' });
+          return;
+        }
         const proposal=/^\/api\/decks\/([a-f0-9-]{36})\/proposals(?:\/([a-f0-9-]{36})(?:\/(apply|reject))?)?$/.exec(url.pathname);
         if(proposal){
           const [,id,pid,action]=proposal,deck=await store.meta(id);
@@ -588,7 +599,7 @@ export async function startStudio(opts = {}) {
         return;
       }
       const p = url.pathname === "/" ? "index.html" : url.pathname.slice(1);
-      if (!["index.html", "help.html", "style.css", "app.js", "workflow-ui.js", "upload-ui.js", "upload-check.js", "time.js", "ai-connection.js", "presenter.js", "presenter.html", "presenter.css", "preflight-ui.js", "authoring-ui.js", "slide-ui.js", "slide-model.js", "data-ui.js", "data-grid.css", "ribbon-ui.js", "link-ui.js", "data-model.js", "jszip.min.js", "text-model.js", "object-model.js"].includes(p)) {
+      if (!["index.html", "help.html", "style.css", "app.js", "workflow-ui.js", "feedback-ui.js", "editor-navigation.js", "upload-ui.js", "upload-check.js", "time.js", "ai-connection.js", "presenter.js", "presenter.html", "presenter.css", "preflight-ui.js", "authoring-ui.js", "slide-ui.js", "slide-model.js", "data-ui.js", "data-grid.css", "ribbon-ui.js", "link-ui.js", "data-model.js", "jszip.min.js", "text-model.js", "object-model.js"].includes(p)) {
         send(res, 404, { error: "페이지를 찾을 수 없습니다." });
         return;
       }

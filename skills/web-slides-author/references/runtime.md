@@ -38,6 +38,7 @@ Discover available tools and their schemas before use; hosts may prefix names.
 | --- | --- | --- |
 | `slides_diagnose_connection` | `{}` | Report actual server/auth/tool/workspace checks, adapter version and report time without secrets |
 | `slides_propose_slide` | `deckId`, `revision`, `slideId`, `html`, `css` | Stage a slide proposal for human review; does not save over current state |
+| `slides_list_feedback` | `deckId`, optional `includeResolved` | Read private modification requests, their content revision and target/stale status; never automatically resolve |
 | `slides_propose_state` | `deckId`, `revision`, `state`, optional `summary` | Stage a complete state for human review |
 | `slides_list_decks` | `{}` | Find a deck |
 | `slides_get_deck` | `deckId` | Read revision, state, slide/object IDs and editor link |

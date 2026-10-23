@@ -46,7 +46,7 @@ test('real stdio SDK authenticates, edits, reloads, rejects conflicts and import
     SLIDES_STUDIO_WORKSPACE: workspace,
   });
   const tools = (await client.listTools()).tools;
-  assert.equal(tools.length, 10);
+  assert.equal(tools.length, 11);
   assert.ok(tools.every(tool => tool.inputSchema.additionalProperties === false));
   assert.ok(!tools.some(tool => /delete|publish|password/.test(tool.name)));
   assert.deepEqual(await ok('slides_list_decks'), { decks: [] });
@@ -201,7 +201,7 @@ test('AI proposals and diagnostics preserve the saved deck and report only obser
   assert.ok(!JSON.stringify(diagnosis).includes(workspace));
   const http = new StudioClient({ SLIDES_STUDIO_URL: app.origin, SLIDES_STUDIO_PASSWORD: password });
   const { report } = await http.request('/ai-connection');
-  assert.equal(report.version, '0.3.0');
+  assert.equal(report.version, '0.4.0');
   assert.deepEqual(report.checks, { server: 'ok', authentication: 'ok', tools: 'ok', workspace: 'ok' });
   assert.ok(Number.isFinite(Date.parse(report.reportedAt)));
   const created = await ok('slides_create_deck');
@@ -227,4 +227,17 @@ test('AI proposals and diagnostics preserve the saved deck and report only obser
   const missing = await connect(t, { SLIDES_STUDIO_URL: app.origin, SLIDES_STUDIO_PASSWORD: password, SLIDES_STUDIO_WORKSPACE: join(root, 'missing') });
   const missingReport = await missing.ok('slides_diagnose_connection');
   assert.equal((missingReport.report || missingReport).checks.workspace, 'error');
+});
+
+test('private feedback is read-only through MCP and its proposal remains reviewable',async t=>{
+ const root=await realpath(await mkdtemp(join(tmpdir(),'slides-mcp-feedback-')));t.after(()=>rm(root,{recursive:true,force:true}));
+ const app=await startStudio({root,port:0,contentPort:0});t.after(()=>app.close());const {ok,client}=await connect(t,{SLIDES_STUDIO_URL:app.origin});const http=new StudioClient({SLIDES_STUDIO_URL:app.origin});
+ const created=await ok('slides_create_deck');const deck=await ok('slides_get_deck',{deckId:created.id});const slideId=deck.state.order[0];
+ const item=await http.request(`/decks/${deck.id}/feedback`,'POST',{revision:deck.revision,slideId,text:'Make the heading shorter'});
+ const feedback=await ok('slides_list_feedback',{deckId:deck.id});assert.equal(feedback.items[0].text,item.text);assert.equal(feedback.items[0].targetExists,true);assert.equal(feedback.items[0].stale,false);
+ assert.ok(!JSON.stringify(feedback).includes((await app.store.meta(deck.id)).previewToken));
+ const tool=(await client.listTools()).tools.find(tool=>tool.name==='slides_list_feedback');assert.equal(tool.annotations.readOnlyHint,true);
+ const proposed=await ok('slides_propose_slide',{deckId:deck.id,revision:deck.revision,slideId,html:'<h1>Short</h1>',css:''});assert.equal(proposed.status,'pending');assert.equal((await app.store.get(deck.id)).revision,deck.revision);
+ await http.request(`/decks/${deck.id}/proposals/${proposed.id}/apply`,'POST',{revision:deck.revision,slides:[slideId]});let current=await ok('slides_list_feedback',{deckId:deck.id});assert.equal(current.items[0].status,'open');assert.equal(current.items[0].stale,true);
+ await http.request(`/decks/${deck.id}/feedback/${item.id}`,'PATCH',{version:item.version,status:'resolved'});assert.equal((await ok('slides_list_feedback',{deckId:deck.id})).items.length,0);assert.equal((await ok('slides_list_feedback',{deckId:deck.id,includeResolved:true})).items[0].status,'resolved');
 });

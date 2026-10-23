@@ -122,10 +122,20 @@ export async function exportDeck({ store, deck, format, url, contentOrigin, incl
     const nativePictureSlides = [];
     for (let i = 0; i < count; i++) {
       await page.evaluate((n) => window.__sd.go(n), i);
-      await page.waitForTimeout(1000);
       await page.evaluate(async () => {
         await Promise.all([...document.images].map(image => image.decode().catch(() => {})));
+        await document.fonts.ready;
         window.SDObjects?.refresh(document);
+        // Capture entrance end frames, including pseudo-elements; infinite decoration keeps its current frame.
+        for (const animation of document.getAnimations()) {
+          const end = animation.effect?.getComputedTiming().endTime;
+          if (Number.isFinite(end)) {
+            animation.effect.updateTiming({ fill: "both" });
+            animation.currentTime = end;
+          }
+          animation.pause();
+        }
+        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
       });
       if (pdf) {
         const bytes = await page.screenshot({ type: "jpeg", quality: 94 });
@@ -136,6 +146,7 @@ export async function exportDeck({ store, deck, format, url, contentOrigin, incl
         continue;
       }
       const slide = ppt.addSlide();
+      const { links, unsupported: unsupportedLinks } = await page.evaluate(() => window.__sd.collectLinks());
       const nativeTextShapes = [];
       nativeTextSlides.push(nativeTextShapes);
       const nativePictures = [];
@@ -168,10 +179,27 @@ export async function exportDeck({ store, deck, format, url, contentOrigin, incl
       });
       const mapping = []; effectMappings.push(mapping);
       addNativeObjects(slide, prepared.entries, nativeTextShapes, nativePictures, mapping);
+      for (const [index, entry] of links.entries()) {
+        let link;
+        try { link = globalThis.SDObjects.normalizeLink(entry.link); } catch { continue; }
+        const target = link?.type === "slide" ? deck.state.order.indexOf(link.slideId) + 1 : 0;
+        if (!link || link.type === "slide" && target === 0 || !Array.isArray(entry.points) || entry.points.length < 3 || entry.points.length > 16 ||
+          !entry.points.every(p => Number.isFinite(p.x) && Number.isFinite(p.y) && p.x >= 0 && p.x <= 1920 && p.y >= 0 && p.y <= 1080)) continue;
+        const x = Math.min(...entry.points.map(p => p.x)), y = Math.min(...entry.points.map(p => p.y));
+        const w = Math.max(...entry.points.map(p => p.x)) - x, h = Math.max(...entry.points.map(p => p.y)) - y;
+        if (w < 1 || h < 1) continue;
+        slide.addShape("custGeom", {
+          objectName: `sd-link-${index}`, x: x / 144, y: y / 144, w: w / 144, h: h / 144,
+          points: [...entry.points.map(p => ({ x: (p.x - x) / 144, y: (p.y - y) / 144 })), { close: true }],
+          fill: { color: "FFFFFF", transparency: 100 }, line: { transparency: 100 },
+          hyperlink: link.type === "url" ? { url: link.url } : { slide: target },
+        });
+      }
       const skippedEffects = deck.state.added.filter(a => a.slide === deck.state.order[i] && ["appear", "fade"].includes(deck.state.animations?.[a.id]) && !mapping.some(m => m.id === a.id || m.id.startsWith(a.id + "--")));
       const note = deck.state.notes?.[deck.state.order[i]] ?? deck.sourceNotes?.[deck.state.order[i]] ?? "";
       const provenance = `SDLAB Slides · 저장 버전 ${deck.revision} · ${i + 1}/${count}\n웹의 3D 배경은 정지 화면입니다. 편집 모드는 글꼴 및 줄바꿈 차이가 있을 수 있습니다.`;
-      const warning = skippedEffects.length ? `\n호환성 알림: 배경 이미지에 포함된 개체 ${skippedEffects.length}개의 진입 효과는 적용하지 않았습니다.` : "";
+      const warning = (skippedEffects.length ? `\n호환성 알림: 배경 이미지에 포함된 개체 ${skippedEffects.length}개의 진입 효과는 적용하지 않았습니다.` : "") +
+        (unsupportedLinks ? `\n호환성 알림: 3D·마스크·둥근 잘림 영역의 링크 ${unsupportedLinks}개는 PPTX에서 제외했습니다. HTML 발표에서 확인하세요.` : "");
       slide.addNotes((note ? `${note}\n\n${provenance}` : provenance) + warning);
       if (format === "pptx-editable")
         await page.evaluate(() => window.__sd.showNative());

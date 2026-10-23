@@ -871,6 +871,10 @@
           if (e.key === "Escape") e.target.blur();
           return;
         }
+        if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && e.key.toLowerCase() === "p") {
+          e.preventDefault(); e.stopImmediatePropagation();
+          finishNudge(true); tell("command-search"); return;
+        }
         if (e.key === "Tab" && selected && !e.ctrlKey && !e.metaKey && !e.altKey) {
           finishNudge(true);
           const elements = editableElements().filter(element => visible(element) && !locked(element));
@@ -1040,6 +1044,101 @@
       c.textShadow === "none" && c.backgroundImage === "none" && parseFloat(c.borderRadius) === 0 &&
       ["Top", "Right", "Bottom", "Left"].every(side => parseFloat(c[`border${side}Width`]) === 0);
   }
+  const exportFontCache = new Map();
+  let exportFontContext;
+  function exportFont(stack) {
+    if (exportFontCache.has(stack)) return exportFontCache.get(stack);
+    exportFontContext ||= document.createElement("canvas").getContext("2d");
+    const generic = { "sans-serif": "Arial", "serif": "Times New Roman", "monospace": "Courier New", "system-ui": "Arial", "-apple-system": "Arial", "blinkmacsystemfont": "Arial", "ui-sans-serif": "Arial", "ui-serif": "Times New Roman", "ui-monospace": "Courier New" };
+    const measure = font => {
+      exportFontContext.font = `72px ${font}`;
+      return exportFontContext.measureText("mmmmWWWiii0123456789한글").width;
+    };
+    let result = "Arial";
+    for (const item of String(stack || "").match(/(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^,])+/g) || []) {
+      const family = item.trim().replace(/^["']|["']$/g, "").replace(/\\(["'\\])/g, "$1");
+      if (generic[family.toLowerCase()]) { result = generic[family.toLowerCase()]; break; }
+      if (exportFontContext && ["monospace", "serif", "sans-serif"].some(base => Math.abs(measure(`${JSON.stringify(family)}, ${base}`) - measure(base)) > 0.01)) {
+        result = family; break;
+      }
+    }
+    exportFontCache.set(stack, result);
+    return result;
+  }
+  function exportRichText(element) {
+    const model = TextEditor.resolve(element);
+    for (const paragraph of model.paragraphs) for (const run of paragraph.runs) run.fontFamily = exportFont(run.fontFamily || getComputedStyle(element).fontFamily);
+    return model;
+  }
+  function exportLinkQuad(element, paddingBox = false) {
+    const rect = element.getBoundingClientRect(), box = geometry(element);
+    if (rect.width < 1 || rect.height < 1) return null;
+    let matrix = new DOMMatrix();
+    for (let node = element; node; node = node.parentElement) {
+      const css = getComputedStyle(node), rotate = css.rotate === "none" ? [0, "deg"] : css.rotate.replace(/^z\s+/, "").match(/^(-?[\d.]+)(deg|rad|turn)$/)?.slice(1);
+      const scale = css.scale === "none" ? [1, 1] : css.scale.split(/\s+/).map(Number);
+      if (!rotate || css.perspective !== "none" || css.clip !== "auto" || css.clipPath !== "none" || css.maskImage !== "none" || /opacity\(/.test(css.filter)) return null;
+      const angle = Number(rotate[0]) * (rotate[1] === "rad" ? 180 / Math.PI : rotate[1] === "turn" ? 360 : 1);
+      const local = new DOMMatrix().rotate(angle).scale(scale[0], scale[1] ?? scale[0]).multiply(new DOMMatrix(css.transform === "none" ? undefined : css.transform)).scale(Number(css.zoom) || 1);
+      if (!local.is2D) return null;
+      matrix = local.multiply(matrix);
+    }
+    const css = getComputedStyle(element);
+    const left = paddingBox ? parseFloat(css.borderLeftWidth) : 0, top = paddingBox ? parseFloat(css.borderTopWidth) : 0;
+    const right = box.bw - (paddingBox ? parseFloat(css.borderRightWidth) : 0), bottom = box.bh - (paddingBox ? parseFloat(css.borderBottomWidth) : 0);
+    return [[left, top], [right, top], [right, bottom], [left, bottom]].map(([x, y]) => ({
+      x: rect.x + rect.width / 2 + matrix.a * (x - box.bw / 2) + matrix.c * (y - box.bh / 2),
+      y: rect.y + rect.height / 2 + matrix.b * (x - box.bw / 2) + matrix.d * (y - box.bh / 2),
+    }));
+  }
+  function clipExportLink(points, clip, edges = [0, 1, 2, 3]) {
+    const cross = (a, b, p) => (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x);
+    const direction = Math.sign(cross(clip[0], clip[1], clip[2]));
+    for (const edge of edges) {
+      const result = [], a = clip[edge], b = clip[(edge + 1) % clip.length];
+      for (let i = 0; i < points.length; i++) {
+        const p = points[i], q = points[(i + 1) % points.length], dp = cross(a, b, p) * direction, dq = cross(a, b, q) * direction;
+        if (dp >= 0) result.push(p);
+        if ((dp >= 0) !== (dq >= 0)) {
+          const t = dp / (dp - dq);
+          result.push({ x: p.x + t * (q.x - p.x), y: p.y + t * (q.y - p.y) });
+        }
+      }
+      points = result;
+    }
+    return points;
+  }
+  function collectLinks() {
+    const links = [], elements = [];
+    let unsupported = 0;
+    function visit(node) {
+      if (node.hasAttribute("data-sd-link")) elements.push(node);
+      for (const child of paintOrder([...node.children])) visit(child);
+    }
+    visit(slides[current]);
+    for (const element of elements) {
+      if (!element.checkVisibility({ opacityProperty: true, visibilityProperty: true }) || element.closest(".notes,[data-speaker-notes]")) continue;
+      let link;
+      try { link = Objects.normalizeLink(JSON.parse(element.getAttribute("data-sd-link"))); } catch { continue; }
+      if (!link) continue;
+      let points = exportLinkQuad(element);
+      for (let node = element.parentElement; points && node; node = node.parentElement) {
+        const css = getComputedStyle(node), edges = [];
+        if (css.overflowX !== "visible") edges.push(1, 3);
+        if (css.overflowY !== "visible") edges.push(0, 2);
+        if (!edges.length) continue;
+        const clip = exportLinkQuad(node, true);
+        if (!clip || parseFloat(css.borderRadius) > 0) { points = null; break; }
+        points = clipExportLink(points, clip, edges);
+      }
+      // Non-affine masks and 3D click regions cannot be represented safely as PPTX polygons.
+      if (!points) { unsupported++; continue; }
+      points = clipExportLink(points, [{ x: 0, y: 0 }, { x: 1920, y: 0 }, { x: 1920, y: 1080 }, { x: 0, y: 1080 }]);
+      points = points.map(p => ({ x: clamp(p.x, 0, 1920), y: clamp(p.y, 0, 1080) }));
+      if (points.length >= 3) links.push({ link, points });
+    }
+    return { links, unsupported };
+  }
   function collectNative(element, original, world, id, groupChild = false) {
     const c = getComputedStyle(element), factor = world.w / (original.w || world.w);
     const rgba = c.backgroundColor.match(/[\d.]+/g) || [];
@@ -1080,7 +1179,7 @@
     }
     if (world.kind !== "text" || !TextEditor.eligible(element)) return { ...base, nativeSupported: false };
     try {
-      const richText = TextEditor.resolve(element);
+      const richText = exportRichText(element);
       const blocks=[...element.querySelectorAll('[data-sd-paragraph]')];
       const renderedLineHeights=richText.paragraphs.map((paragraph,index)=>{
         const block=blocks[index];if(!block)return null;
@@ -1098,7 +1197,7 @@
         textOverflowing: element.dataset.sdTextOverflowing === "true",
         fill,
         padding: Object.fromEntries(["top", "right", "bottom", "left"].map(side => [side, (parseFloat(c["padding" + side[0].toUpperCase() + side.slice(1)]) || 0) * factor])),
-        fontSize: parseFloat(c.fontSize) * factor, fontFamily: c.fontFamily, color: hex(c.color).slice(1),
+        fontSize: parseFloat(c.fontSize) * factor, fontFamily: exportFont(c.fontFamily), color: hex(c.color).slice(1),
         bold: parseInt(c.fontWeight) >= 600, align: ["center", "right"].includes(c.textAlign) ? c.textAlign : "left" };
     } catch { return { ...base, nativeSupported: false }; }
   }
@@ -1142,7 +1241,7 @@
       let richInfo = {};
       if (TextEditor.eligible(e)) {
         try {
-          const richText = TextEditor.resolve(e);
+          const richText = exportRichText(e);
           richInfo = { richText, textBox: TextEditor.box(e), textMetricsScale: Number(e.dataset.sdTextMetricsScale) || 1, fontScale: Number(e.dataset.sdFontScale) || 1, textOverflowing: e.dataset.sdTextOverflowing === "true", padding: Object.fromEntries(["top", "right", "bottom", "left"].map(side => [side, parseFloat(c["padding" + side[0].toUpperCase() + side.slice(1)]) || 0])) };
         } catch { /* Preserve the legacy extraction for unsupported original text. */ }
       }
@@ -1155,6 +1254,7 @@
         w: r.width,
         h: r.height,
         fontSize: parseFloat(c.fontSize) * ss,
+        fontFamily: exportFont(c.fontFamily),
         color: hex(c.color).slice(1),
         bold: parseInt(c.fontWeight) >= 600,
         align: ["center", "right"].includes(c.textAlign) ? c.textAlign : "left",
@@ -1167,6 +1267,7 @@
   window.__sd = {
     go,
     collect,
+    collectLinks,
     get current() {
       return current;
     },
