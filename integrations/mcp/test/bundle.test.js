@@ -7,7 +7,8 @@ import { join } from 'node:path';
 import { readBundle } from '../client.js';
 
 async function fixture(t) {
-  const root = await fs.mkdtemp(join(tmpdir(), 'slides ZIP 한글 '));
+  // Windows TEMP may use a short-name alias; use the canonical workspace path.
+  const root = await fs.realpath(await fs.mkdtemp(join(tmpdir(), 'slides ZIP 한글 ')));
   t.after(async () => {
     t.mock.restoreAll();
     syncBuiltinESMExports();

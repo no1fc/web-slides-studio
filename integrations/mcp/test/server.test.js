@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, writeFile, readFile, rm, symlink, mkdir, truncate } from 'node:fs/promises';
+import { mkdtemp, writeFile, readFile, rm, symlink, mkdir, truncate, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -30,7 +30,7 @@ async function connect(t, env) {
 }
 
 test('real stdio SDK authenticates, edits, reloads, rejects conflicts and imports within the workspace', { timeout: 60000 }, async t => {
-  const root = await mkdtemp(join(tmpdir(), 'slides-mcp-test-'));
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'slides-mcp-test-')));
   t.after(() => rm(root, { recursive: true, force: true }));
   const workspace = join(root, 'workspace');
   await mkdir(workspace);
