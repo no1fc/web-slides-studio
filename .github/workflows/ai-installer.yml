@@ -1,0 +1,34 @@
+name: AI installer
+on:
+  push:
+    paths:
+      - scripts/install-ai.mjs
+      - test/ai-installer.test.js
+      - integrations/mcp/package.json
+      - integrations/mcp/package-lock.json
+      - .github/workflows/ai-installer.yml
+  pull_request:
+    paths:
+      - scripts/install-ai.mjs
+      - test/ai-installer.test.js
+      - integrations/mcp/package.json
+      - integrations/mcp/package-lock.json
+      - .github/workflows/ai-installer.yml
+permissions:
+  contents: read
+jobs:
+  installer:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: integrations/mcp/package-lock.json
+      - run: npm ci --prefix integrations/mcp --ignore-scripts
+      - run: node --test test/ai-installer.test.js
