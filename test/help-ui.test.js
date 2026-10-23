@@ -39,7 +39,7 @@ test("public help explains import limits and import stays available in a populat
     assert.equal(await page.locator("#pptxImportBtn").isVisible(), true);
     const chooser = page.waitForEvent("filechooser");
     await page.locator("#pptxImportBtn").click();
-    assert.equal(await (await chooser).element().getAttribute("accept"), ".pptx");
+    assert.equal(await (await chooser).element().getAttribute("accept"), ".zip,.pptx");
     for (const width of [320, 390, 768, 1440]) {
       await page.setViewportSize({ width, height: 900 });
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);

@@ -46,7 +46,7 @@ test('real stdio SDK authenticates, edits, reloads, rejects conflicts and import
     SLIDES_STUDIO_WORKSPACE: workspace,
   });
   const tools = (await client.listTools()).tools;
-  assert.equal(tools.length, 7);
+  assert.equal(tools.length, 10);
   assert.ok(tools.every(tool => tool.inputSchema.additionalProperties === false));
   assert.ok(!tools.some(tool => /delete|publish|password/.test(tool.name)));
   assert.deepEqual(await ok('slides_list_decks'), { decks: [] });
@@ -185,4 +185,46 @@ test('credentials stay private, redirects are never followed and login happens o
   await assert.rejects(noPassword.request('/needs-auth'), error => error.code === 'authentication');
   assert.equal(logins, 1);
   assert.ok(calls >= 8);
+});
+
+
+test('AI proposals and diagnostics preserve the saved deck and report only observed safe status', { timeout: 60000 }, async t => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'slides-mcp-proposals-')));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const workspace = join(root, 'workspace'); await mkdir(workspace);
+  const password = 'diagnostic-secret-never-output';
+  const app = await startStudio({ root: join(root, 'data'), port: 0, contentPort: 0, password });
+  t.after(() => app.close());
+  const { ok, call, client } = await connect(t, { SLIDES_STUDIO_URL: app.origin, SLIDES_STUDIO_PASSWORD: password, SLIDES_STUDIO_WORKSPACE: workspace });
+  const diagnosis = await ok('slides_diagnose_connection');
+  assert.ok(!JSON.stringify(diagnosis).includes(password));
+  assert.ok(!JSON.stringify(diagnosis).includes(workspace));
+  const http = new StudioClient({ SLIDES_STUDIO_URL: app.origin, SLIDES_STUDIO_PASSWORD: password });
+  const { report } = await http.request('/ai-connection');
+  assert.equal(report.version, '0.3.0');
+  assert.deepEqual(report.checks, { server: 'ok', authentication: 'ok', tools: 'ok', workspace: 'ok' });
+  assert.ok(Number.isFinite(Date.parse(report.reportedAt)));
+  const created = await ok('slides_create_deck');
+  const deck = await ok('slides_get_deck', { deckId: created.id });
+  const slideId = deck.state.order[0];
+  const before = structuredClone(deck.state);
+  await ok('slides_propose_slide', { deckId: deck.id, revision: deck.revision, slideId, html: '<h1>Review first</h1>', css: '' });
+  assert.deepEqual((await ok('slides_get_deck', { deckId: deck.id })).state, before);
+  assert.equal((await app.store.get(deck.id)).revision, deck.revision);
+  deck.state.notes[slideId] = 'Proposed notes';
+  await ok('slides_propose_state', { deckId: deck.id, revision: deck.revision, state: deck.state, summary: 'Review notes' });
+  assert.deepEqual((await ok('slides_get_deck', { deckId: deck.id })).state, before);
+  await ok('slides_update_state', { deckId: deck.id, revision: deck.revision, state: before });
+  assert.equal((await call('slides_propose_state', { deckId: deck.id, revision: deck.revision, state: deck.state })).isError, true);
+  const prompt = await client.getPrompt({ name: 'slides_create_presentation', arguments: { brief: 'A reviewable edit' } });
+  assert.match(prompt.messages[0].content.text, /slides_propose_slide/);
+  const wrong = await connect(t, { SLIDES_STUDIO_URL: app.origin, SLIDES_STUDIO_PASSWORD: 'wrong' });
+  const failed = await wrong.ok('slides_diagnose_connection');
+  assert.equal(failed.report.checks.authentication, 'error');
+  assert.equal(failed.report.checks.server, 'ok');
+  assert.equal(failed.reportSaved, false);
+  assert.equal((await http.request('/ai-connection')).report.reportedAt, report.reportedAt, 'failed authentication must not replace an authenticated report');
+  const missing = await connect(t, { SLIDES_STUDIO_URL: app.origin, SLIDES_STUDIO_PASSWORD: password, SLIDES_STUDIO_WORKSPACE: join(root, 'missing') });
+  const missingReport = await missing.ok('slides_diagnose_connection');
+  assert.equal((missingReport.report || missingReport).checks.workspace, 'error');
 });

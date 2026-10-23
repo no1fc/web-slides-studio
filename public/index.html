@@ -11,12 +11,19 @@
     <script defer src="/object-model.js"></script>
     <script defer src="/slide-model.js"></script>
     <script defer src="/data-model.js"></script>
+    <script defer src="/time.js"></script>
     <script defer src="/app.js"></script>
     <script defer src="/authoring-ui.js"></script>
     <script defer src="/slide-ui.js"></script>
     <script defer src="/data-ui.js"></script>
     <script defer src="/ribbon-ui.js"></script>
     <script defer src="/link-ui.js"></script>
+    <script defer src="/upload-check.js"></script>
+    <script defer src="/upload-ui.js"></script>
+    <script defer src="/ai-connection.js"></script>
+    <script defer src="/presenter.js"></script>
+    <script defer src="/preflight-ui.js"></script>
+    <script defer src="/workflow-ui.js"></script>
   </head>
   <body>
     <div id="toast" role="status" hidden></div>
@@ -44,7 +51,7 @@
         <div class="top-caption">생각을 담고, 바로 발표하세요.</div>
         <a class="help-link" href="/help.html" target="_blank" rel="noopener">사용 설명서 ↗</a>
         <span id="localBadge" class="badge">개인 자료실</span
-        ><button id="passwordBtn" class="quiet">비밀번호 변경</button
+        ><button id="settingsBtn" class="quiet">설정</button><button id="passwordBtn" class="quiet">비밀번호 변경</button
         ><button id="logoutBtn" class="quiet">로그아웃</button>
       </header>
       <section id="library">
@@ -69,7 +76,7 @@
             <div class="actions">
               <button id="newBtn">빈 자료 만들기</button
               ><button id="pptxImportBtn">PPTX 가져오기</button
-              ><button id="uploadBtn" class="primary">＋ HTML ZIP 올리기</button>
+              ><button id="uploadBtn" class="primary">＋ 자료 가져오기</button>
             </div>
           </div>
           <div class="library-tools">
@@ -87,11 +94,10 @@
             <div class="empty-symbol">▱</div>
             <h2>첫 번째 발표 자료를 올려보세요</h2>
             <p>
-              HTML과 이미지, 글꼴이 담긴 ZIP 또는 폴더를 올리세요.<br />Three.js
-              배경도 함께 보관됩니다.
+              발표 파일을 여기에 끌어 놓거나 선택하세요.<br />여러 ZIP과 PowerPoint 파일을 함께 가져올 수 있습니다.
             </p>
             <div class="actions">
-              <button id="emptyUpload" class="primary">ZIP 파일 올리기</button
+              <button id="emptyUpload" class="primary">자료 가져오기</button
               ><button id="folderBtn">폴더 선택</button>
             </div>
             <small>HTML ZIP 최대 40 MiB · 압축 해제 64 MiB · 300개 파일 · 80장</small>
@@ -131,9 +137,11 @@
           <div class="ribbon-tabs">
             <div class="ribbon-tab-list" role="tablist" aria-label="편집 도구 탭">
             <button id="ribbon-insert-tab" role="tab" aria-controls="ribbon-insert" aria-selected="false" tabindex="-1">삽입</button>
-            <button id="ribbon-format-tab" role="tab" aria-controls="ribbon-format" aria-selected="true">서식</button>
+            <button id="ribbon-format-tab" role="tab" aria-controls="ribbon-format" aria-selected="true">홈</button>
             <button id="ribbon-arrange-tab" role="tab" aria-controls="ribbon-arrange" aria-selected="false" tabindex="-1">배치</button>
-            <button id="ribbon-slide-tab" role="tab" aria-controls="ribbon-slide" aria-selected="false" tabindex="-1">슬라이드</button>
+            <button id="ribbon-slide-tab" role="tab" aria-controls="ribbon-slide" aria-selected="false" tabindex="-1">디자인</button>
+            <button id="ribbon-transition-tab" role="tab" aria-controls="ribbon-transition" aria-selected="false" tabindex="-1">전환</button>
+            <button id="ribbon-present-tab" role="tab" aria-controls="ribbon-present" aria-selected="false" tabindex="-1">발표</button>
             <button id="ribbon-file-tab" role="tab" aria-controls="ribbon-file" aria-selected="false" tabindex="-1">파일</button>
             </div>
             <span class="ribbon-hint">도구를 고른 뒤 슬라이드에서 바로 편집하세요.</span>
@@ -142,6 +150,8 @@
           <div id="ribbon-format" class="ribbon-panel" role="tabpanel" aria-labelledby="ribbon-format-tab"></div>
           <div id="ribbon-arrange" class="ribbon-panel" role="tabpanel" aria-labelledby="ribbon-arrange-tab" hidden></div>
           <div id="ribbon-slide" class="ribbon-panel" role="tabpanel" aria-labelledby="ribbon-slide-tab" hidden></div>
+          <div id="ribbon-transition" class="ribbon-panel" role="tabpanel" aria-labelledby="ribbon-transition-tab" hidden></div>
+          <div id="ribbon-present" class="ribbon-panel" role="tabpanel" aria-labelledby="ribbon-present-tab" hidden></div>
           <div id="ribbon-file" class="ribbon-panel" role="tabpanel" aria-labelledby="ribbon-file-tab" hidden></div>
         </div>
         <div class="mobile-note">
@@ -189,9 +199,9 @@
             </div>
             <details id="notesPanel" class="notes-panel">
               <summary>발표자 노트 <span id="notesCount"></span></summary>
-              <label for="notesValue" class="tool-help">현재 슬라이드의 노트 · 공유·HTML·PPTX에 포함됩니다.</label>
+              <label for="notesValue" class="tool-help">현재 슬라이드의 비공개 발표 메모 · 새 공유와 다운로드에서는 기본 제외됩니다.</label>
               <textarea id="notesValue" rows="3" maxlength="20000" placeholder="발표할 내용이나 기억할 내용을 입력하세요." aria-label="발표자 노트"></textarea>
-              <p id="legacyNotesHelp" class="tool-help" hidden>기존 원본의 노트가 20,000자를 초과해 읽기 전용으로 보존됩니다. 공유·내보내기에는 전체 내용이 유지됩니다.</p>
+              <p id="legacyNotesHelp" class="tool-help" hidden>기존 원본의 노트가 20,000자를 초과해 읽기 전용으로 보존됩니다. 공유·내보내기에서 포함을 선택한 경우에만 제공됩니다.</p>
             </details>
             <div class="canvas-footer">
               <span>Shift 비율 · Alt 중심 · 방향키 1px / Shift 10px</span

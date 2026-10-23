@@ -7,6 +7,13 @@
     attach(slides, go, getCurrent) {
       if (!slides.length) return;
       let clean = false;
+      const audience = new URLSearchParams(location.search).get('presentView') === '1';
+      const config = JSON.parse(document.getElementById('sd-config')?.textContent || '{}');
+      let black = false, laser = false;
+      const notify = (data) => {
+        const managerOrigin = config.managerOrigin;
+        if (parent !== window && managerOrigin) parent.postMessage({studio:true, type:'present-state', ...data}, managerOrigin);
+      };
       let stage = slides[0].parentElement;
       if (stage === document.body) {
         stage = document.createElement('div');
@@ -35,7 +42,40 @@
       controls.id = 'sd-presentation-controls';
       controls.setAttribute('aria-label', '발표 제어');
       controls.innerHTML = '<button type="button" aria-label="이전 슬라이드">← 이전</button><output aria-live="polite" aria-label="현재 슬라이드"></output><button type="button" aria-label="다음 슬라이드">다음 →</button><button type="button" aria-label="전체 화면">전체 화면</button>';
+      if (!audience && Number.isInteger(config.publishedRevision) && config.publishedRevision > 0) {
+        const publication = document.createElement('small');
+        publication.id = 'sd-publication-info';
+        publication.setAttribute('aria-label', '공유 게시 정보');
+        const date = config.publishedAt ? new Date(config.publishedAt) : null;
+        let timestamp = '기록 없음';
+        if (date && Number.isFinite(date.getTime())) {
+          const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', {timeZone:'Asia/Seoul', year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit', hourCycle:'h23'}).formatToParts(date).map(part => [part.type, part.value]));
+          timestamp = `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}:${parts.second} (KST)`;
+        }
+        publication.textContent = `공유 v${config.publishedRevision} · 게시 ${timestamp}`;
+        set(publication, {position:'static', 'max-width':'40vw', 'font-size':'12px', 'line-height':'1.4', margin:'0', color:'#cfdae4'});
+        controls.append(publication);
+      }
       document.body.append(controls);
+      if (audience) controls.style.setProperty('display', 'none', 'important');
+      const curtain = document.createElement('div'), pointer = document.createElement('div');
+      curtain.id = 'sd-black-screen'; pointer.id = 'sd-laser-pointer';
+      curtain.style.cssText = 'position:fixed;inset:0;background:#000;z-index:2147483646;pointer-events:none;display:none';
+      pointer.style.cssText = 'position:fixed;width:18px;height:18px;border-radius:50%;background:#f33;border:2px solid white;box-shadow:0 0 16px #f33;transform:translate(-50%,-50%);z-index:2147483647;pointer-events:none;display:none';
+      document.body.append(curtain, pointer);
+      const state = (data, broadcast = true) => {
+        if (typeof data.black === 'boolean') black = data.black;
+        if (typeof data.laser === 'boolean') laser = data.laser;
+        curtain.style.display = black ? 'block' : 'none';
+        pointer.style.display = laser && !black ? 'block' : 'none';
+        if (Number.isFinite(data.x) && Number.isFinite(data.y)) {
+          const rect = stage.getBoundingClientRect();
+          pointer.style.left = `${rect.left + Math.max(0,Math.min(1,data.x)) * rect.width}px`;
+          pointer.style.top = `${rect.top + Math.max(0,Math.min(1,data.y)) * rect.height}px`;
+        }
+        if (broadcast) notify({black, laser, ...(Number.isFinite(data.x) ? {x:data.x,y:data.y} : {})});
+      };
+      addEventListener('pointermove', event => { if (laser && !clean) { const rect=stage.getBoundingClientRect(); state({x:(event.clientX-rect.left)/rect.width,y:(event.clientY-rect.top)/rect.height}); } });
       const [previous, next, fullscreen] = controls.querySelectorAll('button');
       const count = controls.querySelector('output');
       previous.addEventListener('click', () => go(getCurrent() - 1));
@@ -54,7 +94,7 @@
       // Prevent legacy click-to-advance handlers from also handling our buttons.
       controls.addEventListener('click', event => event.stopPropagation());
       const fit = () => {
-        const available = Math.max(1, innerHeight - (clean ? 0 : 56));
+        const available = Math.max(1, innerHeight - (clean || audience ? 0 : 56));
         const scale = Math.min(innerWidth / 1920, available / 1080);
         set(stage, {left:`${(innerWidth - 1920 * scale) / 2}px`, top:`${(available - 1080 * scale) / 2}px`, transform:`scale(${scale})`});
       };
@@ -62,6 +102,11 @@
       navigate = event => {
         if (clean || event.defaultPrevented || event.isComposing || event.ctrlKey || event.metaKey || event.altKey) return;
         const key = event.key;
+        if (key === 'Escape') { notify({type:'present-escape'}); return; }
+        if (['b','B','l','L'].includes(key) && !(event.target instanceof Element && (event.target.isContentEditable || event.target.closest('input,textarea,select,button,a,[role="link"]')))) {
+          event.preventDefault(); event.stopImmediatePropagation();
+          state(key.toLowerCase() === 'b' ? {black:!black} : {laser:!laser}); return;
+        }
         if (!['ArrowRight','ArrowDown','PageDown','ArrowLeft','ArrowUp','PageUp',' ','Home','End'].includes(key)) return;
         const target = event.target;
         const controlShortcut = controls.contains(target) && key !== ' ';
@@ -93,7 +138,11 @@
           count.textContent = `${index + 1} / ${slides.length}`;
           fit();
         },
-        clean() { clean = true; controls.remove(); fit(); },
+        command(data) {
+          if (data.type === 'present-go' && Number.isInteger(data.index)) go(data.index);
+          if (data.type === 'present-state') state(data, false);
+        },
+        clean() { clean = true; controls.remove(); curtain.remove(); pointer.remove(); fit(); },
       };
     },
   };

@@ -150,17 +150,4 @@
     const apply=el('button','적용','primary');apply.id='applyEffectsBtn';apply.onclick=modalAction(async()=>{const candidate=clone(state);candidate.transitions[slide]=transition.value;if(object&&!objectLocked(object.id))candidate.animations[object.id]=animation.value;await commit(candidate,object?[object.id]:[]);$('dialog').close();},'효과 저장 중…');body.append(apply);
   });
   $('pptxImportBtn').onclick=()=> $('pptxInput').click();
-  $('pptxInput').onchange=action(async event=>{
-    const file=event.target.files[0];event.target.value='';if(!file)return;
-    if(file.size>40*1024*1024)throw new Error('PPTX는 40MB까지 가져올 수 있습니다.');
-    $('busyOverlay').hidden=false;
-    try {
-      const report=await api('/import-pptx','POST',file),body=dialog('PPTX 가져오기 검토');
-      body.append(el('p',`${report.counts.slides}장 · 편집 개체 ${report.counts.objects}개`));
-      body.append(el('p','지원 범위의 내용만 변환합니다. 원본 PPTX는 보관해 주세요. 복잡한 배치·마스터·효과는 그대로 재현되지 않을 수 있습니다.','tool-help'));
-      const warnings=el('ul');warnings.id='pptxImportWarnings';for(const warning of report.warnings){warnings.append(el('li',`${warning.slide ? `슬라이드 ${warning.slide}: ` : ''}${warning.message}`));}body.append(warnings);
-      if(!report.warnings.length)body.append(el('p','감지된 변환 경고가 없습니다. 가져온 후 외형을 확인해 주세요.'));
-      const accept=el('button','변환 결과 가져오기','primary');accept.id='confirmPptxImportBtn';accept.onclick=modalAction(async()=>{const created=await api('/import-pptx?confirm=1','POST',file);$('dialog').close();await openDeck(created.id);});body.append(accept);
-    } finally {$('busyOverlay').hidden=true;}
-  });
 })();

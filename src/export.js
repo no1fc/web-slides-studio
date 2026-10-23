@@ -4,6 +4,7 @@ import JSZip from "jszip";
 import { chromium } from "playwright";
 import { PDFDocument } from "pdf-lib";
 import pptxgen from "pptxgenjs";
+import { withoutNotesHtml, withoutNotesDeck, redactNoteText } from "./notes-policy.js";
 import { renderDeck } from "./deck.js";
 import { collectFiles } from "./files.js";
 import { finalizeTextPptx } from "./text-export.js";
@@ -11,19 +12,28 @@ import { finalizeEffectsPptx } from "./effects-export.js";
 import { finalizeDataPptx } from "./data-export.js";
 import { prepareNativeObjects, addNativeObjects, finalizeObjectPptx } from "./object-export.js";
 const publicDir = new URL("../public/", import.meta.url);
-export async function exportDeck({ store, deck, format, url, contentOrigin }) {
+export async function exportDeck({ store, deck, format, url, contentOrigin, includeNotes = true }) {
+  const originalDeck=deck;
+  if(!includeNotes) deck=withoutNotesDeck(deck);
   const effectMappings = [];
   const root = store.path(deck.id, "assets");
   if (format === "html") {
     const zip = new JSZip();
     for (const p of await collectFiles(root)) {
       if (p === "index.html") continue;
-      zip.file(p, await readFile(join(root, p)));
+      let bytes=await readFile(join(root,p));
+      if(!includeNotes && /\.(html|js|json|css|svg)$/i.test(p)) {
+        let text=bytes.toString('utf8');
+        text=/\.html$/i.test(p)?withoutNotesHtml(text,originalDeck):redactNoteText(text,originalDeck);
+        bytes=Buffer.from(text);
+      }
+      zip.file(p, bytes);
     }
     let html = renderDeck(
       await readFile(join(root, "index.html"), "utf8"),
       { ...deck.state, notes: { ...deck.sourceNotes, ...deck.state.notes } },
     );
+    if(!includeNotes) html=withoutNotesHtml(html,originalDeck);
     const config = JSON.stringify({
       edit: false,
       managerOrigin: "",
@@ -43,7 +53,7 @@ export async function exportDeck({ store, deck, format, url, contentOrigin }) {
     }
     zip.file(
       "README.txt",
-      `SDLAB Slides\n저장 버전: ${deck.revision}\n압축을 풀고 index.html을 브라우저에서 여세요.\n이 파일은 발표용입니다. 수정 내용은 자료실에서 관리하세요.\n발표자 노트도 HTML 원본에 포함되며, 파일을 받은 사람이 읽을 수 있습니다.\n`,
+      `SDLAB Slides\n저장 버전: ${deck.revision}\n압축을 풀고 index.html을 브라우저에서 여세요.\n이 파일은 발표용입니다. 수정 내용은 자료실에서 관리하세요.\n${includeNotes ? "발표자 노트도 HTML 원본에 포함되며, 파일을 받은 사람이 읽을 수 있습니다." : "발표자 노트는 제외했습니다."}\n`,
     );
     return {
       buffer: await zip.generateAsync({

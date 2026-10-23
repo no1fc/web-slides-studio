@@ -166,7 +166,7 @@ async function flush() {
   const revision = deck.revision;
   const epoch = editEpoch;
   $("saveStatus").textContent = "저장 중…";
-  saving = api(`/decks/${id}/save`, "POST", { revision, state: snapshot })
+  saving = api(`/decks/${id}/save`, "POST", { revision, state: snapshot, source: "manual", summary: "자동 저장" })
     .then((d) => {
       if (!deck || deck.id !== id) return;
       // Only normalize the snapshot that was acknowledged; later edits stay local.
@@ -338,12 +338,12 @@ function properties() {
   $("noSelection").hidden = !!s;
   $("properties").hidden = !s;
   $("selectedLabel").textContent = s
-    ? `${s.tag.toUpperCase()} 선택됨${objectLocked(s.id) ? " · 잠금" : ""}`
+    ? `${({img:"이미지",table:"표"})[s.tag] || ({shape:"도형",chart:"차트",group:"그룹",table:"표",image:"이미지"})[s.kind] || "글"} 선택됨${objectLocked(s.id) ? " · 잠금" : ""}`
     : selectedElements.length > 1 ? `${selectedElements.length}개 요소 선택됨` : "선택한 요소 없음";
   $("selectionHelp").textContent = selectedElements.length > 1
     ? "여러 개체를 함께 이동·정렬할 수 있습니다. 크기와 내용을 바꾸려면 하나만 선택하세요."
     : "슬라이드 또는 레이어 목록에서 개체를 선택하세요.";
-  $("properties").querySelectorAll("input,textarea,button,select").forEach(control => { control.disabled = !s || objectLocked(s.id); });
+  document.querySelectorAll("#properties input,#properties textarea,#properties button,#properties select,.selection-properties input,.selection-properties textarea,.selection-properties button,.selection-properties select").forEach(control => { control.disabled = !s || objectLocked(s.id); });
   textProperties();
   arrangementTools();
   visualProperties();
@@ -883,7 +883,8 @@ function renderLibrary() {
     const meta = el("div", undefined, "deck-meta");
     meta.append(
       el("span", `${d.folder || "분류 없음"} · ${d.slides.length}장`),
-      el("span", new Date(d.updatedAt).toLocaleDateString("ko-KR")),
+      el("span", `업로드 ${SDTime.format(d.createdAt)}`),
+      el("span", `수정 ${SDTime.format(d.updatedAt)}`),
     );
     info.append(meta);
     const actions = el("div", undefined, "deck-actions");
@@ -1171,94 +1172,6 @@ $("sceneValue").onchange = (e) => {
     else delete state.scenes[slide];
   }))();
 };
-$("previewBtn").onclick = action(async () => {
-  const win = window.open("about:blank", "_blank");
-  await flush();
-  if (win) win.location = deck.previewUrl + "#" + (index + 1);
-});
-$("versionsBtn").onclick = action(async () => {
-  await flush();
-  const rows = await api("/decks/" + deck.id + "/revisions");
-  const body = dialog("저장 버전");
-  body.append(el("p", "이전 버전을 복원해도 현재 버전은 기록에 남습니다."));
-  for (const r of rows) {
-    const row = el("div", undefined, "version-row");
-    row.append(
-      el(
-        "span",
-        `v${r.revision} · ${new Date(r.savedAt).toLocaleString("ko-KR")}`,
-      ),
-    );
-    const b = el("button", r.revision === deck.revision ? "현재 버전" : "복원");
-    b.disabled = r.revision === deck.revision;
-    b.onclick = action(async () => {
-      const d = await api("/decks/" + deck.id + "/restore", "POST", {
-        target: r.revision,
-        revision: deck.revision,
-      });
-      $("dialog").close();
-      deck = d;
-      state = clone(d.state);
-      dirty = false;
-      undo = [];
-      redo = [];
-      refreshFrame();
-      renderSlides();
-      $("saveStatus").textContent = `저장됨 · v${d.revision}`;
-      toast("이전 버전을 복원했습니다.");
-    });
-    row.append(b);
-    body.append(row);
-  }
-});
-$("shareBtn").onclick = action(async () => {
-  await flush();
-  const body = dialog("발표 자료 공유");
-  body.append(
-    el(
-      "p",
-      "게시한 버전만 공유합니다. 이후 편집 내용은 다시 게시할 때 반영됩니다. 링크를 가진 사람은 누구나 볼 수 있습니다.",
-    ),
-  );
-  if (deck.shareUrl) {
-    const input = el("input");
-    input.value = deck.shareUrl;
-    input.readOnly = true;
-    input.onclick = () => input.select();
-    body.append(input, el("p", `현재 공유 버전: v${deck.publishedRevision}`));
-  }
-  const publish = el(
-    "button",
-    deck.shareUrl ? "최신 저장 버전으로 다시 게시" : "공유 링크 만들기",
-    "primary",
-  );
-  publish.onclick = action(async () => {
-    deck = {
-      ...deck,
-      ...(await api("/decks/" + deck.id + "/publish", "POST", {
-        enabled: true,
-      })),
-    };
-    $("dialog").close();
-    $("shareBtn").click();
-  });
-  body.append(publish);
-  if (deck.shareUrl) {
-    const stop = el("button", "공유 종료");
-    stop.style.marginLeft = "8px";
-    stop.onclick = action(async () => {
-      deck = {
-        ...deck,
-        ...(await api("/decks/" + deck.id + "/publish", "POST", {
-          enabled: false,
-        })),
-      };
-      $("dialog").close();
-      toast("기존 공유 링크를 종료했습니다.");
-    });
-    body.append(stop);
-  }
-});
 $("exportBtn").onclick = action(async () => {
   await flush();
   const body = dialog("발표 자료 다운로드");
@@ -1268,6 +1181,11 @@ $("exportBtn").onclick = action(async () => {
       `저장된 v${deck.revision}에서 파일을 만듭니다. PDF·PPTX의 3D 배경은 정지 화면으로 출력됩니다.`,
     ),
   );
+  const notesLabel = el("label"), notesToggle = el("input");
+  notesToggle.type = "checkbox"; notesToggle.id = "exportIncludeNotes";
+  notesToggle.style.width = "auto";
+  notesLabel.append(notesToggle, document.createTextNode(" 발표자 노트 포함 (HTML·PPTX)"));
+  body.append(notesLabel);
   for (const [format, title, detail] of [
     [
       "html",
@@ -1291,6 +1209,7 @@ $("exportBtn").onclick = action(async () => {
       try {
         const job = await api("/decks/" + deck.id + "/export", "POST", {
           format,
+          includeNotes: $("exportIncludeNotes")?.checked === true,
           revision: deck.revision,
         });
         for (;;) {

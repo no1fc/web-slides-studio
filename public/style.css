@@ -1050,3 +1050,70 @@ a:focus-visible, summary:focus-visible { outline: 3px solid #087e77; outline-off
 #ribbon-insert .add-tools { width: 100%; padding: 0; gap: 10px; flex-wrap: wrap; }
 #ribbon-insert .add-tools button { min-width: 85px; padding: 13px 20px; font-size: 13px; }
 #ribbon-insert > .tool-help { margin: 5px 0 0; }
+
+/* One scroll surface per rail; everyday controls remain available while editing. */
+.ribbon-panel { min-height: 108px; padding: 8px 14px; }
+.ribbon-hint { display:none; }
+.ribbon-tab-list > [role=tab] { padding:10px 12px 8px; }
+#properties > .text-tools { max-width: none; min-width:0; width:100%; grid-template-columns: minmax(180px,250px) 90px auto auto 130px; align-items:end; border:0; padding:0; }
+#properties > .text-tools > #textRangeLabel { grid-column:1 / -1; }
+#properties > .text-tools > .prop-grid { grid-template-columns:minmax(100px,1fr) 65px; }
+#properties > .text-tools > #textOverflowNote { grid-column:1 / -1; }
+#properties > .text-tools > label { min-width:0; }
+#properties > .text-tools > label input[type=color] { min-width:45px; }
+.inspector { overflow-y:auto; display:block; }
+.inspector-tabs { min-height:42px; }
+.inspector .selection-properties { border-bottom:1px solid var(--border); padding:8px 0 14px; }
+.inspector .ribbon-dimensions { padding:0; border:0; }
+.inspector .ribbon-geometry { grid-template-columns:repeat(2,minmax(0,1fr)); }
+.inspector .ribbon-dimensions label { font-size:11px; }
+.inspector .ribbon-dimensions input { width:100%; padding:5px; margin:4px 0; }
+.inspector .ribbon-object-actions { margin-top:12px; display:grid; grid-template-columns:1fr 1fr; }
+.inspector .ribbon-object-actions button { font-size:11px; padding:8px 5px; }
+.inspector .layers-panel { display:block; }
+#layerList { overflow:visible; }
+#advancedTools > .ribbon-group { margin-top:10px; }
+.deck-meta { flex-direction:column; align-items:flex-start; gap:4px; }
+.upload-queue { border:1px solid var(--border); border-radius:12px; padding:18px; margin:0 0 24px; background:white; }
+.upload-queue h2 { font-size:17px; margin:0 0 12px; }
+.upload-row { display:flex; align-items:center; gap:12px; border-top:1px solid var(--border); padding:12px 0; }
+.upload-row > div { flex:1; min-width:0; overflow-wrap:anywhere; }
+.upload-row p { margin:6px 0 0; font-size:12px; }
+.upload-row[data-status=error] p { color:#a13b3b; }
+.upload-row[data-status=done] p { color:#087e77; }
+.drop-active .library-main { outline:3px dashed #087e77; outline-offset:-8px; }
+.workflow-form label { display:block; margin:14px 0; }
+.workflow-form input:not([type=checkbox]), .workflow-form select { width:100%; margin-top:6px; }
+.workflow-form input[type=checkbox] { margin-right:8px; }
+.workflow-form .actions { flex-wrap:wrap; }
+#dialog:has(.comparison) { width:min(1200px,94vw); }
+.comparison { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.comparison iframe { width:100%; aspect-ratio:16/9; border:1px solid var(--border); }
+.change-row { padding:14px 0; border-bottom:1px solid var(--border); }
+.change-row pre { white-space:pre-wrap; max-height:140px; overflow:auto; background:#f4f7f7; padding:12px; }
+.version-row { gap:12px; flex-wrap:wrap; }
+.version-row > span { flex:1; min-width:200px; }
+.version-row input { width:160px; }
+.template-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; }
+.template-grid button { text-align:left; padding:22px; }
+@media(max-width:1100px){
+  .ribbon-tabs .add-tools { margin-left:auto; }
+  .ribbon-tabs .add-tools button { font-size:10px; padding:5px; }
+  #properties > .text-tools { grid-template-columns:minmax(160px,1fr) 70px auto auto 110px; }
+  .editor-body { grid-template-columns:145px minmax(0,1fr) 205px; }
+  .top-caption { display:none; }
+}
+@media(max-width:760px){
+  #properties > .text-tools { display:flex; flex-wrap:wrap; }
+  .comparison { grid-template-columns:1fr; }
+}
+#properties > .text-tools { display:flex; flex-wrap:wrap; align-items:end; gap:8px 14px; }
+#properties > .text-tools > #textRangeLabel { flex:1 0 100%; }
+#properties > .text-tools > label { flex:0 1 220px; }
+#properties > .text-tools > label:has(#textAlignValue) { flex-basis:125px; }
+#properties > .text-tools > .prop-grid { flex:0 0 160px; grid-template-columns:90px 56px; }
+#properties > .text-tools > .text-emphasis { flex:0 0 225px; }
+#properties > .text-tools > #paragraphSettingsBtn { flex:0 0 150px; }
+#properties > .text-tools > #textOverflowNote { flex:1 0 100%; }
+.workflow-form input[type=checkbox] { width:auto; display:inline-block; }
+.change-row > label { display:flex; align-items:center; gap:8px; }

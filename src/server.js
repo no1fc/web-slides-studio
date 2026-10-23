@@ -2,7 +2,9 @@ import http from "node:http";
 import { readFile, writeFile, mkdir, stat, rm } from "node:fs/promises";
 import { join, extname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { randomBytes } from "node:crypto";
+import { randomBytes, scryptSync, timingSafeEqual, createHash } from "node:crypto";
+import { Workflows } from "./workflows.js";
+import { withoutNotesHtml, withoutNotesDeck, redactNoteText } from "./notes-policy.js";
 import { Store } from "./store.js";
 import { PasswordStore } from "./auth.js";
 import { inventory, sourceArchive, collectFiles } from "./files.js";
@@ -74,6 +76,8 @@ export async function startStudio(opts = {}) {
     );
   const store = new Store(resolve(opts.root || join(base, "data")));
   await store.init();
+  const workflows = new Workflows(store);
+  const shareSessions = new Map();
   const auth = new PasswordStore(store);
   await auth.init(password);
   if (!["127.0.0.1", "localhost", "::1"].includes(host) && !auth.enabled)
@@ -83,13 +87,27 @@ export async function startStudio(opts = {}) {
     jobs = new Map();
   let busy = false;
   let origin, contentOrigin, renderOrigin;
+  const audienceToken = d => createHash("sha256").update("audience:" + d.previewToken).digest("hex");
   const expose = (d) => ({
-    ...d,
+    ...Object.fromEntries(Object.entries(d).filter(([key]) => !["sharePassword", "shareAccessVersion"].includes(key))),
+    sharePasswordProtected: !!d.sharePassword,
+    shareLegacyNotes: !!d.shareToken && d.shareIncludeNotes === undefined,
     previewUrl: `${contentOrigin}/v/${d.id}/${d.previewToken}/index.html?rev=${d.revision}`,
+    audienceUrl: `${contentOrigin}/a/${d.id}/${audienceToken(d)}/index.html?rev=${d.revision}`,
     shareUrl: d.shareToken
       ? `${contentOrigin}/v/${d.id}/${d.shareToken}/index.html`
       : null,
   });
+  const exposeProposal = (id, p, deck) => ({...p, beforeUrl: `${contentOrigin}/v/${id}/${deck.previewToken}/index.html?rev=${p.baseRevision}`, afterUrl: `${contentOrigin}/v/${id}/${deck.previewToken}/index.html?proposal=${p.id}`});
+  const createImport = async (input, bytes, key) => {
+    if (key && (!/^[a-f0-9]{64}$/.test(key) || createHash('sha256').update(bytes).digest('hex') !== key)) throw new Error('업로드 파일 확인 값이 다릅니다. 다시 선택해 주세요.');
+    return store.locked('_imports',async()=>{
+      if (key) { const existing=(await store.list()).find(d=>!d.deleted && d.importKey===key); if(existing) return store.get(existing.id); }
+      const d=await store.create(input);
+      if(key) {const meta=await store.meta(d.id);await store.atomic(store.path(d.id,'meta.json'),{...meta,importKey:key});}
+      return store.get(d.id);
+    });
+  };
   const issueSession = (res) => {
     const sid = randomBytes(32).toString("hex");
     sessions.set(sid, Date.now() + 12 * 3600000);
@@ -220,23 +238,65 @@ export async function startStudio(opts = {}) {
           send(res, 200, { ok: true });
           return;
         }
+        if (url.pathname === "/api/ai-connection" || url.pathname === "/api/ai/connection-report") {
+          const file = join(store.root, '_ai-connection.json');
+          if (req.method === 'POST') {
+            const b=await json(req), checks={};
+            for (const key of ['server','authentication','tools','workspace']) checks[key]=['ok','error','unknown'].includes(b.checks?.[key])?b.checks[key]:'unknown';
+            if(typeof b.version!=='string'||!/^\d+\.\d+\.\d+(?:[-+][\w.-]+)?$/.test(b.version)) throw new Error('MCP 버전 보고 형식 오류');
+            await store.atomic(file,{version:b.version,client:['codex','claude','unknown'].includes(b.client)?b.client:'unknown',platform:['win32','darwin','linux','unknown'].includes(b.platform)?b.platform:'unknown',checks,reportedAt:new Date().toISOString()});
+          } else if(req.method !== 'GET') { send(res,405,{error:'지원하지 않는 요청'}); return; }
+          let report=null;try{report=JSON.parse(await readFile(file,'utf8'));}catch(e){if(e.code!=='ENOENT')throw e;}
+          send(res,200,{report,minimumVersion:'0.3.0'});return;
+        }
+        if(url.pathname==='/api/import/check' && req.method==='POST') {
+          const input=await importArchive(await body(req,40*1024*1024));send(res,200,{slides:input.slides.length,files:input.files.size,title:input.title});return;
+        }
+        if(url.pathname==='/api/templates') {
+          if(req.method==='GET')send(res,200,await workflows.templates());
+          else if(req.method==='POST')send(res,201,await workflows.saveTemplate(await json(req)));
+          else send(res,405,{error:'지원하지 않는 요청'});return;
+        }
+        const template=/^\/api\/templates\/([a-z0-9-]+)\/create$/.exec(url.pathname);
+        if(template && req.method==='POST'){send(res,201,expose(await workflows.createTemplate(template[1],await json(req))));return;}
+        if(url.pathname==='/api/brands') {
+          if(req.method==='GET')send(res,200,await workflows.brands());
+          else if(req.method==='POST')send(res,201,await workflows.saveBrand(await json(req)));
+          else send(res,405,{error:'지원하지 않는 요청'});return;
+        }
+        const brand=/^\/api\/brands\/([a-f0-9-]{36})\/apply$/.exec(url.pathname);
+        if(brand&&req.method==='POST'){send(res,200,expose(await workflows.applyBrand(brand[1],await json(req))));return;}
+        const proposal=/^\/api\/decks\/([a-f0-9-]{36})\/proposals(?:\/([a-f0-9-]{36})(?:\/(apply|reject))?)?$/.exec(url.pathname);
+        if(proposal){
+          const [,id,pid,action]=proposal,deck=await store.meta(id);
+          if(!pid&&req.method==='GET')send(res,200,(await workflows.proposals(id)).map(p=>exposeProposal(id,p,deck)));
+          else if(!pid&&req.method==='POST')send(res,201,exposeProposal(id,await workflows.propose(id,await json(req)),deck));
+          else if(!action&&req.method==='GET')send(res,200,exposeProposal(id,await workflows.proposal(id,pid),deck));
+          else if(action==='apply'&&req.method==='POST')send(res,200,expose(await workflows.apply(id,pid,await json(req))));
+          else if(action==='reject'&&req.method==='POST')send(res,200,exposeProposal(id,await workflows.reject(id,pid),deck));
+          else send(res,405,{error:'지원하지 않는 요청'});return;
+        }
+        const revisionName=/^\/api\/decks\/([a-f0-9-]{36})\/revision-name$/.exec(url.pathname);
+        if(revisionName&&req.method==='POST'){const b=await json(req);send(res,200,await store.nameRevision(revisionName[1],b.revision,b.name));return;}
         if (url.pathname === "/api/decks" && req.method === "GET") {
           send(res, 200, (await store.list()).map(expose));
           return;
         }
         if (url.pathname === "/api/decks" && req.method === "POST") {
-          const input = await importArchive(await body(req, 40 * 1024 * 1024));
-          send(res, 201, expose(await store.create(input)));
+          const bytes=await body(req,40*1024*1024);
+          const input = await importArchive(bytes);
+          send(res, 201, expose(await createImport(input,bytes,req.headers["x-import-key"])));
           return;
         }
         if (url.pathname === "/api/import-pptx" && req.method === "POST") {
           const { importPptx } = await import("./pptx-import.js");
-          const input = await importPptx(await body(req, 40 * 1024 * 1024));
+          const bytes=await body(req,40*1024*1024);
+          const input = await importPptx(bytes);
           // Preview and confirmation both parse the supplied file. No temporary
           // public asset store or unbounded server-side upload session is needed.
           input.state = validateState(input.state, input);
           if (url.searchParams.get("confirm") !== "1") send(res, 200, input.report);
-          else send(res, 201, expose(await store.create(input)));
+          else send(res, 201, expose(await createImport(input,bytes,req.headers["x-import-key"])));
           return;
         }
         if (url.pathname === "/api/new" && req.method === "POST") {
@@ -298,7 +358,7 @@ export async function startStudio(opts = {}) {
           }
           if (action === "save" && req.method === "POST") {
             const b = await json(req);
-            send(res, 200, expose(await store.save(id, b.revision, b.state)));
+            send(res, 200, expose(await store.save(id, b.revision, b.state, {source: ["manual", "ai"].includes(b.source) ? b.source : undefined, summary: typeof b.summary === "string" ? b.summary : "자료 저장"})));
             return;
           }
           if (action === "authoring" && req.method === "GET") {
@@ -319,17 +379,12 @@ export async function startStudio(opts = {}) {
           if (action === "restore" && req.method === "POST") {
             const b = await json(req);
             const d = await store.get(id, b.target);
-            send(res, 200, expose(await store.save(id, b.revision, d.state)));
+            send(res, 200, expose(await store.save(id, b.revision, d.state, {source: "restore", summary: `버전 ${b.target} 복원`})));
             return;
           }
           if (action === "publish" && req.method === "POST") {
-            send(
-              res,
-              200,
-              expose(
-                await store.publish(id, (await json(req)).enabled === true),
-              ),
-            );
+            const b = await json(req);
+            send(res,200,expose(await store.publish(id,b.enabled === true,b)));
             return;
           }
           if (action === "duplicate" && req.method === "POST") {
@@ -482,7 +537,8 @@ export async function startStudio(opts = {}) {
                     store,
                     deck: d,
                     format: b.format,
-                    url: expose(d).previewUrl.replace(
+                    includeNotes: b.includeNotes === true,
+                    url: (expose(d).previewUrl + (b.includeNotes === true ? "" : "&omitNotes=1")).replace(
                       contentOrigin,
                       renderOrigin,
                     ),
@@ -532,7 +588,7 @@ export async function startStudio(opts = {}) {
         return;
       }
       const p = url.pathname === "/" ? "index.html" : url.pathname.slice(1);
-      if (!["index.html", "help.html", "style.css", "app.js", "authoring-ui.js", "slide-ui.js", "slide-model.js", "data-ui.js", "data-grid.css", "ribbon-ui.js", "link-ui.js", "data-model.js", "jszip.min.js", "text-model.js", "object-model.js"].includes(p)) {
+      if (!["index.html", "help.html", "style.css", "app.js", "workflow-ui.js", "upload-ui.js", "upload-check.js", "time.js", "ai-connection.js", "presenter.js", "presenter.html", "presenter.css", "preflight-ui.js", "authoring-ui.js", "slide-ui.js", "slide-model.js", "data-ui.js", "data-grid.css", "ribbon-ui.js", "link-ui.js", "data-model.js", "jszip.min.js", "text-model.js", "object-model.js"].includes(p)) {
         send(res, 404, { error: "페이지를 찾을 수 없습니다." });
         return;
       }
@@ -557,7 +613,7 @@ export async function startStudio(opts = {}) {
         send(res, 421, { error: "호스트 오류" });
         return;
       }
-      if (req.method !== "GET" && req.method !== "HEAD") {
+      if (req.method !== "GET" && req.method !== "HEAD" && req.method !== "POST") {
         send(res, 405, { error: "읽기 전용" });
         return;
       }
@@ -571,7 +627,7 @@ export async function startStudio(opts = {}) {
         );
         return;
       }
-      const m = /^\/v\/([a-f0-9-]{36})\/([a-f0-9]{48})\/(.+)$/.exec(
+      const m = /^\/[va]\/([a-f0-9-]{36})\/([a-f0-9]{48}|[a-f0-9]{64})\/(.+)$/.exec(
         url.pathname,
       );
       if (!m) {
@@ -579,13 +635,44 @@ export async function startStudio(opts = {}) {
         return;
       }
       const [, id, token, raw] = m;
+      const audiencePath=url.pathname.startsWith("/a/");
       const meta = await store.meta(id);
-      const preview = token === meta.previewToken;
-      if (meta.deleted || ((!preview || !token) && token !== meta.shareToken)) {
+      const preview = !audiencePath && token === meta.previewToken;
+      const audience = audiencePath && token === audienceToken(meta);
+      const share = !audiencePath && token === meta.shareToken;
+      if (meta.deleted || !(preview || audience || share)) {
         send(res, 404, { error: "공유가 종료되었거나 자료가 없습니다." });
         return;
       }
-      const revision = preview
+      if (share && meta.shareExpiresAt && Date.parse(meta.shareExpiresAt) <= Date.now()) { send(res,410,{error:'이 공유 링크는 만료되었습니다.'});return; }
+      const accessPath=`/v/${id}/${token}/`;
+      if (share && meta.sharePassword) {
+        const cookie=/studio_share=([a-f0-9]{64})/.exec(req.headers.cookie||'')?.[1];
+        const access=shareSessions.get(cookie);
+        const authorized=access && access.id===id && access.version===meta.shareAccessVersion && access.expires>Date.now();
+        if(req.method==='POST' && raw==='unlock') {
+          if(req.headers.origin!==contentOrigin){send(res,403,{error:'공유 화면에서 암호를 입력해 주세요.'});return;}
+          const key='share:'+req.socket.remoteAddress+':'+id,now=Date.now();let attempt=attempts.get(key)||{count:0,at:now};
+          if(now-attempt.at>60000)attempt={count:0,at:now};attempts.set(key,attempt);
+          if(++attempt.count>10){send(res,429,{error:'잠시 후 다시 시도해 주세요.'});return;}
+          const form=new URLSearchParams((await body(req,2048)).toString()),password=form.get('password');
+          const valid=typeof password==='string'&&password.length<=128&&timingSafeEqual(scryptSync(password,meta.sharePassword.salt,64),Buffer.from(meta.sharePassword.hash,'hex'));
+          if(!valid){send(res,401,'암호가 올바르지 않습니다. 뒤로 돌아가 다시 입력해 주세요.','text/plain; charset=utf-8');return;}
+          const sid=randomBytes(32).toString('hex');shareSessions.set(sid,{id,version:meta.shareAccessVersion,expires:Date.now()+3600000});
+          res.setHeader('Set-Cookie',`studio_share=${sid}; HttpOnly; SameSite=Strict; Path=${accessPath}; Max-Age=3600${contentOrigin.startsWith('https:')?'; Secure':''}`);
+          res.writeHead(303,{Location:accessPath+'index.html','Cache-Control':'no-store'});res.end();return;
+        }
+        if(!authorized) {
+          if(raw!=='index.html'){send(res,401,{error:'공유 암호 확인이 필요합니다.'});return;}
+          res.setHeader('Content-Security-Policy',"default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'");
+          send(res,401,`<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>공유 발표 열기</title><style>body{font:18px system-ui;max-width:420px;margin:15vh auto;padding:24px}input,button{font:inherit;padding:12px;margin-top:12px;box-sizing:border-box;width:100%}</style><h1>공유 발표 열기</h1><form method="post" action="${accessPath}unlock"><label>접근 암호<input name="password" type="password" required maxlength="128" autocomplete="current-password"></label><button>발표 열기</button></form></html>`,'text/html; charset=utf-8');return;
+        }
+      }
+      if(req.method==='POST'){send(res,405,{error:'읽기 전용'});return;}
+      if(preview && !audiencePath && url.searchParams.get('mode')==='audience') {
+        res.writeHead(302,{Location:`/a/${id}/${audienceToken(meta)}/${raw}`+url.search,'Cache-Control':'no-store'});res.end();return;
+      }
+      const revision = preview || audience
         ? url.searchParams.has("rev")
           ? Number(url.searchParams.get("rev"))
           : meta.revision
@@ -600,11 +687,16 @@ export async function startStudio(opts = {}) {
         "camera=(), microphone=(), geolocation=()",
       );
       if (p === "index.html") {
-        const d = await store.get(id, revision);
-        const source = await readFile(
+        let d = await store.get(id, revision);
+        if(preview && url.searchParams.has('proposal')) { const proposal=await workflows.proposal(id,url.searchParams.get('proposal')); d={...d,state:proposal.state}; }
+        const omitNotes = audiencePath || url.searchParams.get('mode') === 'audience' || url.searchParams.get('omitNotes') === '1' || !preview && meta.shareIncludeNotes === false;
+        const originalDeck = d;
+        if(omitNotes) d=withoutNotesDeck(d);
+        let source = await readFile(
           store.path(id, "assets/index.html"),
           "utf8",
         );
+        if(omitNotes) source=withoutNotesHtml(source,originalDeck);
         const renderState = { ...d.state, notes: { ...d.sourceNotes, ...d.state.notes } };
         if (url.searchParams.get("mode") === "thumbnail") {
           const nonce = randomBytes(18).toString("base64");
@@ -616,12 +708,16 @@ export async function startStudio(opts = {}) {
           return;
         }
         let html = renderDeck(source, renderState);
+        if(omitNotes) html=withoutNotesHtml(html,originalDeck);
         // Per-document memory storage prevents an imported deck's old localStorage from overriding saved revisions.
         const bootstrap =
           '<script>(()=>{const m=new Map();const s={getItem:k=>m.get(k)||null,setItem:(k,v)=>m.set(k,String(v)),removeItem:k=>m.delete(k),clear:()=>m.clear()};try{Object.defineProperty(window,"localStorage",{value:s});}catch{}})();</script>';
         const config = {
           managerOrigin: origin,
-          edit: preview && url.searchParams.get("mode") === "edit",
+          edit: preview && !url.searchParams.has("proposal") && url.searchParams.get("mode") === "edit",
+          audience: audience || url.searchParams.get("mode") === "audience",
+          publishedAt: share ? meta.publishedAt || null : null,
+          publishedRevision: share ? meta.publishedRevision : null,
           state: d.state,
           slides: d.slides,
         };
@@ -636,19 +732,16 @@ export async function startStudio(opts = {}) {
         send(res, 200, html, "text/html; charset=utf-8");
         return;
       }
-      if (p.endsWith(".html")) {
+      if (/\.html$/i.test(p)) {
         send(res, 404, { error: "발표 진입점은 index.html입니다." });
         return;
       }
       const file = store.path(id, "assets", p);
       const info = await stat(file);
       if (!info.isFile()) throw new Error("파일 오류");
-      send(
-        res,
-        200,
-        await readFile(file),
-        types[extname(p).toLowerCase()] || "application/octet-stream",
-      );
+      let bytes=await readFile(file);
+      if((audiencePath || !preview&&meta.shareIncludeNotes===false || preview&&url.searchParams.get('omitNotes')==='1') && /\.(js|json|css|svg)$/i.test(p)) bytes=Buffer.from(redactNoteText(bytes.toString('utf8'),await store.get(id,revision)));
+      send(res,200,bytes,types[extname(p).toLowerCase()] || "application/octet-stream");
     }),
   );
   await new Promise((r, j) =>

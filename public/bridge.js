@@ -93,6 +93,7 @@
     for (const [name, [x, y]] of Object.entries(handles)) {
       const button = document.createElement("button");
       button.type = "button";
+      button.tabIndex = -1;
       button.dataset.sdHandle = name;
       button.setAttribute("aria-label", name === "rotate" ? "회전" : `${name} 크기 조절`);
       button.style.left = `${(x + 1) * 50}%`;
@@ -934,6 +935,9 @@
       .querySelectorAll("[contenteditable]")
       .forEach((e) => e.removeAttribute("contenteditable"));
   window.addEventListener("message", (e) => {
+    if (!edit && e.source === parent && e.origin === config.managerOrigin && e.data?.studio) {
+      presentation?.command(e.data); return;
+    }
     if (
       e.source !== parent ||
       e.origin !== config.managerOrigin ||
@@ -969,6 +973,10 @@
       editRequests.add(d.requestId);
       settleEdits();
     }
+    if (d.type === "preflight") {
+      settleEdits();
+      scanPresentation().then(issues => tell("preflight-result", {requestId:d.requestId, issues}));
+    }
     if (d.type === "go") go(d.index);
     if (d.type === "patch" && typeof d.id === "string" && d.patch && typeof d.patch === "object") {
       const target = document.querySelector(`[data-sd-id="${CSS.escape(d.id)}"]`);
@@ -985,6 +993,46 @@
       select(null);
     }
   });
+  async function scanPresentation() {
+    await document.fonts.ready;
+    const issues = [];
+    const add = (severity, message, index, element, hint) => issues.push({severity, message, index, slideId:slides[index]?.dataset.sdSlide, id:element?.closest('[data-sd-id]')?.dataset.sdId || null, hint});
+    for (let index = 0; index < slides.length; index++) {
+      const slide = slides[index], beforeStyle = slide.getAttribute('style'), active = slide.classList.contains('active');
+      try {
+        slide.classList.add('active');
+        if (getComputedStyle(slide).display === 'none') slide.style.setProperty('display', 'block', 'important');
+        const bounds = slide.getBoundingClientRect();
+        for (const element of slide.querySelectorAll('[data-sd-id],img,a[href]')) {
+          if (element.closest('.notes,#notes,[data-sd-notes]')) continue;
+          const computed = getComputedStyle(element), rect = element.getBoundingClientRect();
+          if (computed.display === 'none' || computed.visibility === 'hidden' || element.tagName !== 'IMG' && (!rect.width || !rect.height)) continue;
+          if (element.dataset.sdId && (rect.left < bounds.left - 2 || rect.top < bounds.top - 2 || rect.right > bounds.right + 2 || rect.bottom > bounds.bottom + 2))
+            add('warning', '개체가 슬라이드 밖으로 나가 있습니다.', index, element, '의도한 배경이나 장식인지 확인하고, 필요한 경우 위치와 크기를 조절하세요.');
+          if (element.dataset.sdId && element.textContent.trim() && element.clientWidth > 0 && element.clientHeight > 0 && !element.querySelector('[data-sd-id],img,svg,table') && (element.dataset.sdTextOverflowing === 'true' || element.scrollWidth > element.clientWidth + 2 || element.scrollHeight > element.clientHeight + 2))
+            add('warning', '글이 글상자 영역을 넘을 수 있습니다.', index, element, '글상자를 늘리거나 글자 크기와 줄 간격을 확인하세요.');
+          if (element.tagName === 'IMG' && element.complete && element.naturalWidth === 0)
+            add('error', '이미지를 불러오지 못했습니다.', index, element, '이미지를 다시 넣거나 가져온 자료의 이미지 파일을 확인하세요.');
+          else if (element.tagName === 'IMG' && !element.complete)
+            add('manual', '이미지가 아직 로드되지 않아 확인이 필요합니다.', index, element, '잠시 뒤 다시 점검하세요.');
+          let link; try { link = JSON.parse(element.getAttribute('data-sd-link') || 'null'); } catch {}
+          const hash = element.getAttribute('href');
+          if (link?.type === 'slide' && !slides.some(s => s.dataset.sdSlide === link.slideId) || hash?.startsWith('#') && hash.length > 1 && !document.getElementById(hash.slice(1)) && !slides.some(s => s.dataset.sdSlide === hash.slice(1)))
+            add('error', '이동할 슬라이드 또는 내부 링크 대상이 없습니다.', index, element, '링크 도구에서 이동할 대상을 다시 선택하세요.');
+          if (element.textContent.trim() && !document.fonts.check(`${computed.fontSize} ${computed.fontFamily}`))
+            add('warning', '사용한 글꼴이 아직 준비되지 않았습니다.', index, element, '글꼴 파일을 확인하거나 다른 글꼴을 선택하세요.');
+        }
+        if (slide.querySelector('canvas,video,audio') || [...slide.querySelectorAll('*')].some(el => getComputedStyle(el).animationName !== 'none'))
+          add('manual', '애니메이션·동영상·3D 장면은 직접 재생해 확인하세요.', index, null, '자동 점검으로 재생 결과나 출력 파일과의 차이를 판정할 수 없습니다.');
+      } finally {
+        if (beforeStyle === null) slide.removeAttribute('style'); else slide.setAttribute('style', beforeStyle);
+        slide.classList.toggle('active', active);
+      }
+    }
+    for (const font of document.fonts) if (font.status === 'error') add('error', `글꼴 파일을 불러오지 못했습니다: ${font.family}`, current, null, '자료에 글꼴 파일을 포함하거나 설치된 글꼴로 바꾸세요.');
+    add('manual', '외부 PC의 설치 글꼴·애니메이션·Three.js·출력 결과는 수동 확인이 필요합니다.', current, null, '실제 발표 화면과 내려받은 파일을 열어 확인하세요. 자동 점검은 디자인을 변경하지 않습니다.');
+    return issues;
+  }
   function nativeStyleSupported(element) {
     const c = getComputedStyle(element);
     return c.opacity === "1" && c.filter === "none" && c.clipPath === "none" && c.boxShadow === "none" &&

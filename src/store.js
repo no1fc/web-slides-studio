@@ -8,7 +8,7 @@ import {
   stat,
 } from "node:fs/promises";
 import { join } from "node:path";
-import { randomUUID, randomBytes } from "node:crypto";
+import { randomUUID, randomBytes, scryptSync } from "node:crypto";
 import { parseHTML } from "linkedom";
 import { extractNotes, inheritNotes, initialState, validateState } from "./deck.js";
 import { authoringAssets } from "./authoring.js";
@@ -125,7 +125,7 @@ export class Store {
     }
     return result.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }
-  async save(id, baseRevision, raw) {
+  async save(id, baseRevision, raw, details = {}) {
     return this.locked(id, async () => {
       const meta = await this.meta(id);
       if (baseRevision !== meta.revision) {
@@ -162,6 +162,8 @@ export class Store {
       await this.atomic(this.path(id, "revisions", revision + ".json"), {
         state,
         savedAt: now,
+        ...(details.source ? { source: details.source } : {}),
+        summary: typeof details.summary === "string" ? details.summary.slice(0, 300) : "자료 저장",
       });
       await this.atomic(this.path(id, "meta.json"), {
         ...meta,
@@ -190,7 +192,7 @@ export class Store {
       return m;
     });
   }
-  async publish(id, enabled = true) {
+  async publish(id, enabled = true, options = {}) {
     return this.locked(id, async () => {
       const m = await this.meta(id);
       if (m.deleted) throw new Error("휴지통의 자료는 게시할 수 없습니다.");
@@ -198,6 +200,21 @@ export class Store {
         ? m.shareToken || randomBytes(24).toString("hex")
         : null;
       m.publishedRevision = enabled ? m.revision : null;
+      if (enabled) {
+        if (options.expiresAt && (!Number.isFinite(Date.parse(options.expiresAt)) || Date.parse(options.expiresAt) <= Date.now())) throw new Error("만료일은 현재보다 뒤의 시각으로 선택해 주세요.");
+        if (options.password != null && (typeof options.password !== "string" || options.password.length > 128 || options.password.length > 0 && options.password.length < 4)) throw new Error("공유 암호는 4~128자로 입력해 주세요.");
+        m.publishedAt = new Date().toISOString();
+        m.shareIncludeNotes = options.includeNotes === true;
+        m.shareExpiresAt = options.expiresAt ? new Date(options.expiresAt).toISOString() : null;
+        m.shareAccessVersion = randomBytes(16).toString("hex");
+        if (options.password) {
+          const salt = randomBytes(16).toString("hex");
+          m.sharePassword = { salt, hash: scryptSync(options.password, salt, 64).toString("hex") };
+        } else if (Object.hasOwn(options, "password")) m.sharePassword = null;
+      } else {
+        m.sharePassword = null;
+        m.shareAccessVersion = null;
+      }
       await this.atomic(this.path(id, "meta.json"), m);
       return m;
     });
@@ -205,19 +222,30 @@ export class Store {
   async revisions(id) {
     const m = await this.meta(id);
     const out = [];
-    for (let n = m.revision; n >= Math.max(1, m.revision - 99); n--) {
+    for (let n = m.revision; n >= 1; n--) {
       const s = JSON.parse(
         await readFile(this.path(id, "revisions", n + ".json"), "utf8"),
       );
-      out.push({ revision: n, savedAt: s.savedAt });
+      out.push({ revision: n, savedAt: s.savedAt, ...(s.source ? { source: s.source } : {}), ...(s.summary ? { summary: s.summary } : {}), ...(s.name ? { name: s.name } : {}) });
     }
     return out;
+  }
+  async nameRevision(id, revision, name) {
+    return this.locked(id, async () => {
+      await this.get(id, revision);
+      if (typeof name !== "string" || name.length > 100) throw new Error("버전 이름은 100자 이하로 입력해 주세요.");
+      const file = this.path(id, "revisions", revision + ".json");
+      const snap = JSON.parse(await readFile(file, "utf8"));
+      await this.atomic(file, { ...snap, name: name.trim() });
+      return this.revisions(id);
+    });
   }
   async duplicate(id) {
     return this.locked(id, async () => {
       const d = await this.get(id);
       const nid = randomUUID();
-      await cp(this.path(id), this.path(nid), { recursive: true });
+      await mkdir(this.path(nid), { recursive: true });
+      for (const directory of ["assets", "revisions"]) await cp(this.path(id, directory), this.path(nid, directory), { recursive: true });
       const now = new Date().toISOString();
       const m = {
         ...(await this.meta(id)),
@@ -228,6 +256,7 @@ export class Store {
         previewToken: randomBytes(24).toString("hex"),
         shareToken: null,
         publishedRevision: null,
+        publishedAt: null, sharePassword: null, shareAccessVersion: null, shareExpiresAt: null,
         deleted: false,
       };
       await this.atomic(this.path(nid, "meta.json"), m);

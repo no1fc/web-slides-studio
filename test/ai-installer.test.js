@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { install } from '../scripts/install-ai.mjs';
+import { install, configure } from '../scripts/install-ai.mjs';
 
 test('AI installer registers user clients without password values and protects existing config', async () => {
   const home = await mkdtemp(join(tmpdir(), 'slides-install-'));
@@ -32,5 +32,22 @@ test('AI installer registers user clients without password values and protects e
     assert.equal(calls.filter(([, a]) => a[1] === 'remove').length, 2);
     await assert.rejects(install({ url: 'http://remote.example.com' }, { home, repository, runner }), /HTTPS/);
     await assert.rejects(install({ client: 'unknown' }, { home, repository, runner }), /client/);
+  } finally { await rm(home, { recursive: true, force: true }); }
+});
+
+
+test('interactive setup keeps credentials out of arguments and reuses a private local file', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'slides-private-setup-'));
+  try {
+    let asked = 0;
+    const options = await configure({ client: 'codex' }, { home, askPassword: async () => { asked++; return 'private-test-password'; } });
+    assert.equal(asked, 1);
+    assert.equal(await readFile(options['password-file'], 'utf8'), 'private-test-password\n');
+    assert.ok(!JSON.stringify(options).includes('private-test-password'));
+    await configure(options, { home, askPassword: async () => { throw new Error('must reuse'); } });
+    const otherHome = join(home, 'open-server');
+    const noPassword = await configure({}, { home: otherHome, askPassword: async () => '' });
+    assert.equal(noPassword['password-file'], undefined);
+    assert.ok(noPassword.workspace.startsWith(otherHome));
   } finally { await rm(home, { recursive: true, force: true }); }
 });
