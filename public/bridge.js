@@ -6,6 +6,9 @@
   const edit = config.edit === true;
   const slides = [...document.querySelectorAll("[data-sd-slide]")];
   const effects = globalThis.SDEffects?.attach(config, slides, edit);
+  const originalGoSlide = window.goSlide;
+  const presentation = edit ? null : globalThis.SDPresentation?.attach(slides, go, () => current);
+  if (presentation) window.goSlide = go;
   let current = 0,
     selected = null,
     selection = [],
@@ -18,6 +21,9 @@
   const added = new Map((config.state?.added || []).map((a) => [a.id, a]));
   const effective = (id) => ({ ...(added.get(id) || {}), ...(patches[id] || {}) });
   const Text = globalThis.SDText, TextEditor = globalThis.SDTextEditor, Objects = globalThis.SDObjects;
+  const linkAttributes = new Map();
+  const runtimeLinks = new WeakMap();
+  let linksEnabled = !edit;
   const textRanges = new WeakMap();
   const pendingTextCommands = [];
   const displays = new Map();
@@ -38,6 +44,34 @@
     ? "[data-sd-id]{cursor:move}.sd-selected{outline:3px solid #4cddc9!important;outline-offset:5px}#hud,#help,#progress{display:none!important}[contenteditable=true]{cursor:text}.sd-selected img{pointer-events:none}"
     : "";
   document.head.append(style);
+  if (!edit) {
+    style.textContent += '[data-sd-link-active]{cursor:pointer}[data-sd-link-active]:focus-visible{outline:3px solid #087e77;outline-offset:4px}';
+    for (const element of document.querySelectorAll("[data-sd-link]")) {
+      let link;
+      try { link = Objects.normalizeLink(JSON.parse(element.getAttribute("data-sd-link"))); } catch { continue; }
+      if (!link) continue;
+      runtimeLinks.set(element, link);
+      linkAttributes.set(element, Object.fromEntries(["role", "tabindex", "aria-label"].map(name => [name, element.getAttribute(name)])));
+      element.setAttribute("data-sd-link-active", "");
+      element.setAttribute("role", "link");
+      element.setAttribute("tabindex", "0");
+      if (!element.textContent.trim() && !element.getAttribute("aria-label"))
+        element.setAttribute("aria-label", element.getAttribute("alt") || (link.type === "url" ? `웹 페이지 열기: ${link.url}` : "슬라이드로 이동"));
+    }
+    const activateLink = event => {
+      if (!linksEnabled || event.type === "keydown" && (event.key !== "Enter" || event.repeat)) return;
+      const element = event.target.closest?.("[data-sd-link-active]"), link = runtimeLinks.get(element);
+      if (!link) return;
+      event.preventDefault(); event.stopImmediatePropagation();
+      if (link.type === "url") window.open(link.url, "_blank", "noopener,noreferrer");
+      else {
+        const index = slides.findIndex(slide => slide.dataset.sdSlide === link.slideId);
+        if (index !== -1) go(index);
+      }
+    };
+    document.addEventListener("click", activateLink, true);
+    document.addEventListener("keydown", activateLink, true);
+  }
   const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
   const round = (v) => Math.round(v * 100) / 100;
   const handles = { nw: [-1, -1], n: [0, -1], ne: [1, -1], e: [1, 0], se: [1, 1], s: [0, 1], sw: [-1, 1], w: [-1, 0], rotate: [0, -1] };
@@ -118,7 +152,7 @@
       select(null);
     }
     current = next;
-    if (typeof window.goSlide === "function") window.goSlide(current);
+    if (typeof originalGoSlide === "function") originalGoSlide(current);
     else {
       slides.forEach((s, i) => s.classList.toggle("active", i === current));
       document.body.dataset.scene = slides[current]?.dataset.scene || "dim";
@@ -128,6 +162,7 @@
         stage.style.transform = `scale(${innerWidth / 1920})`;
       }
     }
+    presentation?.show(current);
     Objects.refresh(slides[current]);
     for (const el of slides[current]?.querySelectorAll('[data-sd-rich="true"]') || []) TextEditor.fit(el);
     tell("navigate", { index: current });
@@ -188,6 +223,7 @@
         id: e.dataset.sdId,
         tag: p.kind === "image" ? "img" : e.tagName.toLowerCase(),
         kind: p.kind || (e.tagName === "IMG" ? "image" : "html"),
+        link: p.link ?? null,
         groupable: groupable(e),
         ...(p.kind === "image" ? { image: Objects.normalizeImage(p.image || {}) } : {}),
         ...(p.kind === "shape" ? { shape: Objects.normalizeShape(p.shape || {}, p.fill) } : {}),
@@ -236,6 +272,11 @@
   function patch(id, p) {
     const e = document.querySelector(`[data-sd-id="${CSS.escape(id)}"]`);
     if (!e) return;
+    if (Object.hasOwn(p, "link")) {
+      try { p = { ...p, link: Objects.normalizeLink(p.link) }; }
+      catch (error) { tell("notice", { message: error.message }); return; }
+      Objects.applyLink(e, p.link);
+    }
     patches[id] = { ...(patches[id] || {}), ...p };
     const q = effective(id);
     if (p.text !== undefined) e.textContent = p.text;
@@ -550,6 +591,7 @@
   }
   function snapshotObject(source, includeAnimation = false) {
     const box = objectBox(source), p = effective(source.dataset.sdId);
+    if (Object.hasOwn(p, "link")) box.link = Objects.normalizeLink(p.link);
     if (nativeAdded(source)) {
       const copy = structuredClone(p);
       delete copy.id; delete copy.slide; delete copy.locked; delete copy.hidden; delete copy.layerPosition;
@@ -632,9 +674,15 @@
     } catch (error) { tell("notice", { message: error.message }); }
   }
   if (edit) {
+    const preventAnchorNavigation = e => {
+      if (e.target.closest?.("a[href]")) { e.preventDefault(); e.stopImmediatePropagation(); }
+    };
+    document.addEventListener("auxclick", preventAnchorNavigation, true);
+    document.addEventListener("keydown", e => { if (e.key === "Enter" && !e.target.isContentEditable) preventAnchorNavigation(e); }, true);
     document.addEventListener(
       "click",
       (e) => {
+        if (e.target.closest?.("a[href]")) { e.preventDefault(); e.stopImmediatePropagation(); return; }
         if (e.target.closest?.("#sd-selection-overlay")) { e.preventDefault(); e.stopImmediatePropagation(); return; }
         if (formTarget(e.target)) return;
         if (e.target.isContentEditable) {
@@ -820,6 +868,14 @@
             beginText(target); return;
           }
           if (e.key === "Escape") e.target.blur();
+          return;
+        }
+        if (e.key === "Tab" && selected && !e.ctrlKey && !e.metaKey && !e.altKey) {
+          finishNudge(true);
+          const elements = editableElements().filter(element => visible(element) && !locked(element));
+          const next = elements[elements.indexOf(selected) + (e.shiftKey ? -1 : 1)];
+          if (next) { e.preventDefault(); e.stopImmediatePropagation(); select(next); }
+          else select(null);
           return;
         }
         e.stopImmediatePropagation();
@@ -1082,6 +1138,16 @@
       document.getElementById("sd-hide-native")?.remove();
     },
     clean() {
+      linksEnabled = false;
+      presentation?.clean();
+      for (const [element, attributes] of linkAttributes) {
+        element.blur();
+        element.removeAttribute("data-sd-link-active");
+        for (const [name, value] of Object.entries(attributes)) {
+          if (value === null) element.removeAttribute(name);
+          else element.setAttribute(name, value);
+        }
+      }
       effects?.stop();
       select(null);
       const s = document.createElement("style");
@@ -1094,7 +1160,7 @@
     for (const el of document.querySelectorAll('[data-sd-rich="true"]')) TextEditor.fit(el);
     if (edit) report();
   });
-  if (typeof window.goSlide !== "function") {
+  if (!presentation && typeof window.goSlide !== "function") {
     addEventListener("resize", () => go(current));
     if (!edit)
       document.addEventListener("keydown", (e) => {

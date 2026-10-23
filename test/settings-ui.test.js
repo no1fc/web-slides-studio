@@ -25,7 +25,8 @@ test("file manager downloads files and password form validates, changes and logs
     assert.equal(await p.locator("#passwordBtn").count(), 1);
     await p.locator("#newBtn").click();
     await p.waitForSelector("#editor:not([hidden])");
-    await p.locator("#filesBtn").click();
+    await p.locator("#ribbon-file-tab").click();
+  await p.locator("#filesBtn").click();
     await p.waitForSelector(".file-row");
     assert.match(await p.locator("#dialogBody").innerText(), /ZIP 자체는/);
     assert.match(

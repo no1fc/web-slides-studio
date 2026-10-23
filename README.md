@@ -67,9 +67,31 @@ npm start
 
 현재 개발 검증 환경은 **Windows, Node.js 22.14.0, Chrome 156.0.8078.47**입니다. Linux 운영 환경에서는 설치한 Chromium과 한글 글꼴로 배포 전 검증을 수행하세요. macOS 실행과 실제 PowerPoint 프로그램의 외형 재현은 별도 검증 대상입니다.
 
-기존 서버는 [5단계 Linux 업데이트 안내](docs/STAGE5_LINUX_DEPLOYMENT.md)를 따라 통합 `main`을 재배포합니다. 레이아웃은 기존 HTML과 별도 개체를 보존하며, 노트는 공유·HTML·PPTX에도 포함됩니다. 이후 로드맵은 PPTX 호환성 검증(6), 가져오기·표·차트·효과 확장(7)의 2단계입니다.
+기존 서버는 [5단계 Linux 업데이트 안내](docs/STAGE5_LINUX_DEPLOYMENT.md)를 따라 통합 `main`을 재배포합니다. 레이아웃은 기존 HTML과 별도 개체를 보존하며, 노트는 공유·HTML·PPTX에도 포함됩니다. 6·7단계의 PPTX 가져오기·표·차트·효과도 포함되어 있습니다. 해당 업데이트는 [6·7단계 안내](docs/STAGE6_7_LINUX_DEPLOYMENT.md)를 확인하세요.
 
 **처음 사용한다면:** ‘자료 올리기 → 폴더 선택’에서 [`examples/basic-deck`](examples/basic-deck)을 선택하거나 해당 폴더를 ZIP으로 묶어 올리세요. 별도 외부 자산 없이 두 장의 예제 발표가 생성됩니다.
+
+## Codex·Claude Code에서 직접 수정하기
+
+[AI 제작 안내와 복사용 프롬프트](docs/AI_AUTHORING.md), [설치 가능한 제작 Skill](skills/web-slides-author/SKILL.md)을 제공합니다. 역할별 작업 지침을 공유하는 [agency-agents](https://github.com/msitarzewski/agency-agents)의 사용 방식에서 아이디어를 얻었습니다. 이 저장소의 Skill은 제작·시각 검토·저장 검증 절차를 안내하며, 함께 제공하는 MCP가 실제 서버 API를 호출합니다.
+
+저장소를 내려받은 뒤 다음을 실행하세요. `--client`는 `codex`, `claude`, `all` 중 선택합니다. `all`은 설치된 CLI를 찾습니다.
+
+```sh
+npm ci --ignore-scripts
+npm ci --prefix integrations/mcp --ignore-scripts
+node scripts/install-ai.mjs --client all --url https://slides.example.com --password-file /absolute/private/password.txt --workspace /absolute/deck-workspace
+```
+
+- URL은 자신의 서버 주소로 바꿉니다. 비밀번호 파일에는 **현재 로그인 비밀번호**만 한 줄로 저장하고, 저장소 밖에서 본인만 읽을 수 있게 관리하세요. 암호 없는 로컬 서버는 URL과 비밀번호 옵션을 생략할 수 있습니다.
+- Skill은 Codex의 `~/.agents/skills/web-slides-author`, Claude Code의 `~/.claude/skills/web-slides-author`에 설치하고, 각 CLI로 사용자 범위 MCP를 등록합니다. 기존 항목 변경은 `--replace`로 명시합니다.
+- MCP가 로컬 저장소의 Node 스크립트를 실행하므로 설치 후 이 폴더를 이동하지 마세요. 이동하면 새 경로에서 다시 설치합니다. AI 클라이언트를 재시작하고 해당 도구를 활성화하세요.
+- ZIP 가져오기는 지정한 workspace 내부의 일반 ZIP만 허용합니다. 외부 서버는 HTTPS가 필요하며, 비밀번호 값은 MCP 등록 명령에 넣지 않습니다.
+- 연결 후 “web-slides-author Skill과 Slides Studio MCP를 사용해서 자료 목록을 확인하고, 선택한 자료를 수정해 줘”라고 요청합니다. 클라이언트의 도구 승인 정책은 그대로 적용됩니다.
+
+MCP는 목록·읽기·생성·슬라이드 HTML/CSS 수정·상태 저장·ZIP 가져오기 7개 도구와 제작 프롬프트를 제공합니다. 저장할 때 최신 revision을 확인하여 다른 편집을 덮어쓰지 않습니다. 게시·삭제 도구는 제공하지 않습니다. 실제 동작은 인증이 켜진 임시 서버와 표준 MCP 클라이언트로 검증합니다.
+
+발표 버튼을 누르면 한 장씩 화면에 맞춰 표시합니다. 이전/다음 버튼, 방향키·Page Up/Down·Space·Home/End로 이동하고 전체 화면을 선택할 수 있습니다. 발표의 Tab은 링크/버튼 포커스를, 편집 캔버스에서 선택한 개체의 Tab/Shift+Tab은 다음/이전 개체 선택을 지원합니다.
 
 ## 무엇이 서버에 저장되나요?
 
@@ -111,7 +133,7 @@ my-deck/
 - 슬라이드는 `.slide` 요소 또는 같은 부모 아래의 `section` 요소로 인식합니다.
 - 고정 **16:9 / 1920×1080** 발표를 우선 지원합니다.
 - ZIP 최대 **40 MiB**, 해제 후 **64 MiB**, **300개 파일**, **80장**입니다. 추가 이미지도 해당 자료의 파일 수·자산 용량 제한에 포함됩니다.
-- 지원 확장자는 HTML/CSS/JS, PNG/JPG/JPEG/WebP/GIF/SVG/ICO, WOFF/WOFF2/TTF/OTF, JSON, MP4/WebM입니다. PDF/PPTX는 업로드 편집 대상이 아닙니다.
+- 지원 확장자는 HTML/CSS/JS, PNG/JPG/JPEG/WebP/GIF/SVG/ICO, WOFF/WOFF2/TTF/OTF, JSON, MP4/WebM입니다. 위 확장자는 HTML 패키지 내부 자산입니다. PPTX는 별도 가져오기 버튼으로 지원 요소를 변환합니다(16:9, 40 MiB, 해제 64 MiB, 내부 ZIP 항목 2,000개, 1~80장, 편집 개체 500개). PDF·구형 PPT·PPTM·DOCX·HWP·KEY는 가져오지 않습니다.
 - 외부 CDN·API·iframe 의존 자료는 그대로 동작하지 않을 수 있습니다. 라이브러리와 이미지·글꼴을 로컬 경로로 포함하세요.
 - 임의 웹사이트나 모든 프레젠테이션 프레임워크를 자동 변환하지 않습니다. 가져온 자료의 레이아웃과 편집 가능한 요소를 먼저 확인하세요.
 
@@ -127,6 +149,8 @@ my-deck/
 텍스트 개체를 선택하면 전체 서식을, 더블클릭하고 글자를 드래그해 선택하면 해당 문자 범위의 서식을 바꿉니다. 자동 맞춤은 저장한 글자 크기·문단 값을 유지하면서 화면 표시를 줄이며 최소 표시 크기는 6px입니다. 여전히 넘치면 상자를 늘리거나 내용을 조정하세요. 이미지·표·다른 편집 개체가 들어 있는 복합 컨테이너는 안쪽 텍스트 개체를 선택해야 합니다. 자세한 조작은 [사용 안내](docs/USER_GUIDE.md#텍스트-전체부분-서식과-문단)를 확인하세요.
 
 Three.js를 PPTX의 네이티브 3D 모델로 변환하는 기능은 없습니다. 편집 가능한 PPTX는 데스크톱 PowerPoint에서의 완전한 재현을 보장하지 않습니다.
+
+상단 메뉴에서 서식·배치·슬라이드·파일 도구를 사용하고 자세한 속성은 설정 창으로 엽니다. 표·차트는 셀을 직접 편집하며, 요소의 **링크**에서 웹 주소나 슬라이드 목록의 이동 대상을 선택합니다. 링크는 발표·공유·HTML에서 작동합니다.
 
 자료실의 **PPTX 가져오기**는 16:9 자료의 직접 배치된 텍스트·기본 도형·그림·표·차트·노트를 변환합니다. 변환 경고를 검토한 후 자료를 생성하며, 원본을 무손실로 왕복하는 기능은 아닙니다. 편집기의 **표**, **차트**, **전환·효과** 사용법과 지원 범위는 [6·7단계 안내](docs/STAGE6_7_LINUX_DEPLOYMENT.md)를 확인하세요.
 
@@ -149,6 +173,7 @@ node --env-file=.env src/server.js
 ```sh
 npm test
 npm run test:e2e
+npm run test:mcp
 ```
 
 테스트는 임시 디렉터리에 자체 생성 자료를 사용합니다. 개인 발표 파일이나 실제 운영 계정이 필요하지 않습니다. Chromium 경로를 `CHROME_PATH`로 지정할 수 있습니다.

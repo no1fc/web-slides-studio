@@ -29,6 +29,23 @@
     if (typeof value !== "string" || value.length > 1000 || /[\\?#:%\x00-\x1f\x7f]/.test(value) || value.startsWith("/") || !/\.(png|jpe?g|webp|gif)$/i.test(value) || value.split("/").some(part => !part || part.startsWith(".") || part !== part.trim())) throw new Error("허용되지 않는 이미지 경로입니다.");
     return value;
   }
+  function normalizeLink(value) {
+    if (value === null) return null;
+    record(value, ["type", "url", "slideId"], "링크");
+    if (value.type === "slide" && !own(value, "url") && typeof value.slideId === "string" && /^(?:s\d+|s-[a-z0-9-]{1,50})$/.test(value.slideId) && value.slideId.length <= 52)
+      return { type: "slide", slideId: value.slideId };
+    if (value.type === "url" && !own(value, "slideId") && typeof value.url === "string" && value.url.length <= 2048 && /^https?:\/\//i.test(value.url) && !/[\s\x00-\x1f\x7f-\x9f\\<>"']/.test(value.url)) {
+      let url;
+      try { url = new URL(value.url); } catch { throw new Error("올바른 웹 주소를 입력해 주세요."); }
+      if (["http:", "https:"].includes(url.protocol) && url.hostname && !url.username && !url.password) return { type: "url", url: value.url };
+    }
+    throw new Error("링크는 http(s) 웹 주소 또는 슬라이드여야 합니다.");
+  }
+  function applyLink(element, value) {
+    const link = normalizeLink(value);
+    if (link) element.setAttribute("data-sd-link", JSON.stringify(link));
+    else element.removeAttribute("data-sd-link");
+  }
   function normalizeImage(value = {}) {
     record(value, ["mode", "crop"], "이미지");
     const mode = own(value, "mode") ? value.mode : "stretch";
@@ -59,12 +76,13 @@
     const frame = { x: Math.max(0, dx), y: Math.max(0, dy), w: Math.min(width, cw * sx), h: Math.min(height, ch * sy) };
     return { x: dx - crop.left * w, y: dy - crop.top * h, w, h, crop: { left: crop.left + Math.max(0, -dx) / w, top: crop.top + Math.max(0, -dy) / h, right: crop.right + Math.max(0, -dx) / w, bottom: crop.bottom + Math.max(0, -dy) / h }, frame };
   }
-  const objectKeys = ["kind", "x", "y", "w", "h", "rotate", "z", "hidden", "locked", "text", "richText", "textBox", "fontSize", "textMetricsScale", "inheritFontSize", "color", "fill", "src", "image", "shape", "group"];
+  const objectKeys = ["kind", "x", "y", "w", "h", "rotate", "z", "hidden", "locked", "text", "richText", "textBox", "fontSize", "textMetricsScale", "inheritFontSize", "color", "fill", "src", "image", "shape", "group", "link"];
   function normalizeObject(value, depth = 0, budget = { count: 0 }) {
     record(value, objectKeys, "개체");
     if (++budget.count > 500) throw new Error("그룹 내부를 포함한 추가 요소는 500개까지 사용할 수 있습니다.");
     if (!["text", "image", "shape", "group"].includes(value.kind)) throw new Error("그룹은 추가한 텍스트·이미지·도형만 지원합니다.");
     const result = { kind: value.kind, x: own(value, "x") ? value.x : 0, y: own(value, "y") ? value.y : 0, w: value.w, h: value.h };
+    if (own(value, "link")) result.link = normalizeLink(value.link);
     if (!finite(result.x, -5000, 5000) || !finite(result.y, -5000, 5000) || !finite(result.w, 1, 5000) || !finite(result.h, 1, 5000)) throw new Error("개체 위치·크기 값 오류");
     for (const key of ["rotate", "z", "hidden", "locked", "fontSize", "textMetricsScale", "inheritFontSize", "color", "fill", "text", "richText", "textBox", "src", "image", "shape", "group"]) {
       if (!own(value, key)) continue;
@@ -151,6 +169,7 @@
     const element = document.createElement("div");
     position(element, object);
     element.setAttribute("data-sd-kind", object.kind);
+    if (own(object, "link")) applyLink(element, object.link);
     if (object.kind === "text") {
       element.setAttribute("data-sd-text-metrics-scale", String(object.textMetricsScale ?? 1));
       element.textContent = object.text || "";
@@ -241,5 +260,5 @@
       if (element?.getAttribute?.("data-sd-rich") === "true" && global.SDTextEditor) global.SDTextEditor.fit(element);
     }
   }
-  global.SDObjects = Object.freeze({ normalizeImage, normalizeShape, normalizeGroup, normalizeObject, safeImageSource, imageLayout, groupObjects, ungroup, assertUniform, createElement, applyVisual, refresh });
+  global.SDObjects = Object.freeze({ normalizeImage, normalizeShape, normalizeGroup, normalizeObject, normalizeLink, applyLink, safeImageSource, imageLayout, groupObjects, ungroup, assertUniform, createElement, applyVisual, refresh });
 })(globalThis);

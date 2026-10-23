@@ -104,6 +104,7 @@ test("character controls emit settled formatting commands without prematurely ch
 test("paragraph and box controls preserve their command scopes and indentation limits", () => fixture(async ({ page, select, commands, change }) => {
   await select(info());
   for (const [id, value] of [["textAlignValue", "justify"], ["lineHeightValue", "2"], ["spaceAfterValue", "18"], ["listStyleValue", "number"], ["verticalAlignValue", "bottom"], ["textOverflowValue", "visible"], ["textAutoFitValue", "none"]]) await change(id, value);
+  await page.locator("#paragraphSettingsBtn").click();
   await page.locator("#indentTextBtn").click();
   await page.locator("#outdentTextBtn").click();
   await page.waitForTimeout(50);

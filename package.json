@@ -6,7 +6,9 @@
   "scripts": {
     "start": "node src/server.js",
     "test": "node --test --test-concurrency=2 test/*.test.js",
-    "test:e2e": "node --test test/editor-recovery.test.js test/settings-ui.test.js"
+    "test:e2e": "node --test test/editor-recovery.test.js test/settings-ui.test.js",
+    "test:mcp": "npm test --prefix integrations/mcp",
+    "install:ai": "node scripts/install-ai.mjs"
   },
   "dependencies": {
     "jszip": "3.10.1",

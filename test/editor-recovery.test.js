@@ -43,7 +43,8 @@ test("scene overrides survive duplication and original option removes override",
   fixture(async (app, browser, d) => {
     const p = await open(app, browser, d);
     const sceneSaved = p.waitForResponse(r => r.url().endsWith("/save") && r.request().method() === "POST");
-    await p.locator("#sceneValue").selectOption("dim");
+    await p.locator("#ribbon-slide-tab").click();
+  await p.locator("#sceneValue").selectOption("dim");
     await sceneSaved;
     await p.waitForFunction(() => document.querySelector("#saveStatus").textContent.startsWith("저장됨"));
     const frameSource = await p.locator("#deckFrame").getAttribute("src");
@@ -57,7 +58,8 @@ test("scene overrides survive duplication and original option removes override",
     assert.equal(s.scenes[copyId], "dim");
     const restored = p.waitForResponse(r => r.url().endsWith("/save") && r.request().method() === "POST");
     await p.locator("#slideList .slide-item").first().click();
-    await p.locator("#sceneValue").selectOption("");
+    await p.locator("#ribbon-slide-tab").click();
+  await p.locator("#sceneValue").selectOption("");
     await restored;
     s = (await app.store.get(d.id)).state;
     assert.equal(Object.hasOwn(s.scenes, "s0"), false);
@@ -67,7 +69,8 @@ test("scene input is preserved while a queued frame navigation settles editing",
   fixture(async (app, browser, d) => {
     const p = await open(app, browser, d);
     const firstSave = p.waitForResponse(r => r.url().endsWith("/save") && r.request().method() === "POST");
-    await p.locator("#sceneValue").selectOption("dim");
+    await p.locator("#ribbon-slide-tab").click();
+  await p.locator("#sceneValue").selectOption("dim");
     await firstSave;
     await p.waitForFunction(() => document.querySelector("#saveStatus").textContent.startsWith("저장됨"));
     await p.frameLocator("#deckFrame").locator(".slide.active").waitFor();
@@ -102,8 +105,11 @@ test("conflicting edits can be saved deliberately as a new version", () =>
     ]) {
       const f = p.frames().find((f) => f.url().startsWith(app.contentOrigin));
       await f.locator(".slide.active h1").click();
+      await p.locator("#ribbon-format-tab").click();
+      await p.locator("#textContentSettingsBtn").click();
       await p.locator("#textValue").fill(text);
       await p.locator("#textValue").dispatchEvent("change");
+      await p.locator("#textContentSettings").getByRole("button", { name: "닫기", exact: true }).click();
       await p.waitForTimeout(1000);
     }
     await b.waitForSelector("#conflictKeepBtn", { timeout: 2000 });

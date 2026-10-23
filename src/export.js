@@ -32,13 +32,13 @@ export async function exportDeck({ store, deck, format, url, contentOrigin }) {
     const bootstrap =
       '<script>try{const m=new Map();Object.defineProperty(window,"localStorage",{value:{getItem:k=>m.get(k)||null,setItem:(k,v)=>m.set(k,String(v)),removeItem:k=>m.delete(k)}})}catch{}</script>';
     html = html
-      .replace(/<head([^>]*)>/i, "<head$1>" + bootstrap)
+      .replace(/<head([^>]*)>/i, '<head$1><meta charset="utf-8"><script src="assets/studio-presentation.js"></script>' + bootstrap)
       .replace(
         /<\/body>/i,
         `<script id="sd-config" type="application/json">${config}</script><script src="assets/studio-object-model.js"></script><script src="assets/studio-data-model.js"></script><script src="assets/studio-effects.js"></script><script src="assets/studio-text-model.js"></script><script src="assets/studio-text-editor.js"></script><script src="assets/studio-viewer.js"></script></body>`,
       );
     zip.file("index.html", html);
-    for (const [source, target] of [["data-model.js", "studio-data-model.js"], ["effects.js", "studio-effects.js"], ["object-model.js", "studio-object-model.js"], ["text-model.js", "studio-text-model.js"], ["text-editor.js", "studio-text-editor.js"], ["bridge.js", "studio-viewer.js"]]) {
+    for (const [source, target] of [["presentation.js", "studio-presentation.js"], ["data-model.js", "studio-data-model.js"], ["effects.js", "studio-effects.js"], ["object-model.js", "studio-object-model.js"], ["text-model.js", "studio-text-model.js"], ["text-editor.js", "studio-text-editor.js"], ["bridge.js", "studio-viewer.js"]]) {
       zip.file("assets/" + target, await readFile(new URL(source, publicDir)));
     }
     zip.file(
@@ -81,7 +81,7 @@ export async function exportDeck({ store, deck, format, url, contentOrigin }) {
       const allowed =
         u.origin === contentOrigin &&
         (u.pathname.startsWith(prefix) ||
-          ["/_studio/bridge.js", "/_studio/object-model.js", "/_studio/text-model.js", "/_studio/text-editor.js", "/_studio/data-model.js", "/_studio/effects.js"].includes(u.pathname)) &&
+          ["/_studio/presentation.js", "/_studio/bridge.js", "/_studio/object-model.js", "/_studio/text-model.js", "/_studio/text-editor.js", "/_studio/data-model.js", "/_studio/effects.js"].includes(u.pathname)) &&
         route.request().method() === "GET";
       return allowed ? route.continue() : route.abort("blockedbyclient");
     });

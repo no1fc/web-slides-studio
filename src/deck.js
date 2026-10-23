@@ -174,8 +174,10 @@ const patchKeys = new Set([
   "inheritFontSize",
   "table",
   "chart",
+  "link",
 ]);
 function validateTextFields(patch) {
+  if (Object.hasOwn(patch, "link")) Objects.normalizeLink(patch.link);
   if (Object.hasOwn(patch, "table")) globalThis.SDData.normalizeTable(patch.table);
   if (Object.hasOwn(patch, "chart")) globalThis.SDData.normalizeChart(patch.chart);
   if (Object.hasOwn(patch, "richText")) normalizeRichText(patch.richText);
@@ -188,6 +190,7 @@ function validPatch(p) {
   record(p, "편집 데이터");
   for (const [k, v] of Object.entries(p)) {
     if (!patchKeys.has(k)) throw new Error("허용되지 않는 편집 항목입니다.");
+    if (k === "link") p.link = Objects.normalizeLink(v);
     if (k === "table") p.table = globalThis.SDData.normalizeTable(v);
     if (k === "chart") p.chart = globalThis.SDData.normalizeChart(v);
     if (k === "richText") p.richText = normalizeRichText(v);
@@ -369,6 +372,7 @@ export function validateState(raw, deck) {
   };
 }
 export function applyPatch(e, p) {
+  if (Object.hasOwn(p, "link")) Objects.applyLink(e, p.link);
   if (p.text !== undefined && p.richText === undefined) {
     e.textContent = p.text;
     e.removeAttribute("data-sd-rich");

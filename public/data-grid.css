@@ -1,0 +1,26 @@
+#dialog:has(#dataGrid) { width: min(920px, 95vw); max-height: 92vh; overflow: auto; }
+.data-grid-toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 16px 0 10px; }
+.data-grid-toolbar button { padding: 7px 12px; }
+.data-grid-count { color: var(--muted); font-size: 12px; margin-left: auto; }
+.data-grid-scroll { overflow: auto; max-height: 340px; border: 1px solid var(--border); border-radius: 8px; }
+.data-grid-scroll table { border-collapse: separate; border-spacing: 0; width: 100%; table-layout: fixed; }
+.data-grid-scroll th, .data-grid-scroll td { border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: 0; min-width: 120px; }
+.data-grid-scroll thead th { position: sticky; top: 0; z-index: 1; }
+.data-grid-scroll th { height: 28px; background: #edf2f5; font-size: 12px; color: #516774; }
+.data-grid-scroll th:first-child { width: 38px; min-width: 38px; }
+.data-grid-scroll td { width: 140px; }
+#dataGrid textarea { display: block; resize: vertical; width: 100%; min-width: 120px; min-height: 42px; margin: 0; padding: 10px; border: 0; border-radius: 0; background: white; font: inherit; line-height: 1.4; }
+#dataGrid textarea:focus { outline: 2px solid var(--accent, #087e77); outline-offset: -2px; background: #f1fbf9; }
+#dataGrid textarea:disabled { background: #f2f4f6; }
+.data-grid-bulk { margin: 14px 0; }
+.data-grid-bulk summary { cursor: pointer; color: #516774; font-size: 13px; }
+.data-series-colors { display: flex; flex-wrap: wrap; gap: 8px 18px; }
+#dialogBody:has(#dataGrid) .data-series-colors label { margin: 6px 0; min-width: 100px; }
+#dialogBody:has(#dataGrid) label input[type=color] { width: 70px; height: 36px; padding: 3px; }
+#dialogBody:has(#dataGrid) label input[type=number], #dialogBody:has(#dataGrid) select { width: 180px; }
+#dialogBody #dataEditError { color: #b42318; }
+#applyDataBtn { position: sticky; bottom: 0; margin-top: 10px; }
+
+.data-format-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0 20px; align-items: center; }
+#dialogBody:has(#dataGrid) .data-format-fields label { margin: 8px 0; }
+#dialogBody:has(#dataGrid) input[type=checkbox] { display: inline-block; width: auto; margin-left: 8px; vertical-align: middle; }

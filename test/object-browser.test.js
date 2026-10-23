@@ -28,12 +28,17 @@ async function fixture(fn, objects) {
     await page.goto(app.origin + "/#deck=" + deck.id);
     const frame = page.frameLocator("#deckFrame");
     await frame.locator('[data-sd-id="a-text"], [data-sd-id="a-group"]').first().waitFor();
+    await ready(page);
     await page.evaluate(() => { window.objectMessages = []; window.addEventListener("message", e => { if (e.data?.studio) window.objectMessages.push(e.data); }); });
     await fn({ app, deck, page, frame });
   } finally { await browser?.close(); await app.close(); await rm(root, { recursive: true, force: true }); }
 }
 const item = (frame, id) => frame.locator(`[data-sd-id="${id}"]`);
-const send = (page, type, data = {}) => page.evaluate(({ type, data }) => { const f = document.querySelector("#deckFrame"); f.contentWindow.postMessage({ studio: true, type, ...data }, new URL(f.src).origin); }, { type, data });
+const ready = page => page.waitForFunction(() => typeof frameReady !== "undefined" && frameReady && !transitionBusy && !objectBusy);
+const send = async (page, type, data = {}) => {
+  await ready(page);
+  await page.evaluate(({ type, data }) => { const f = document.querySelector("#deckFrame"); f.contentWindow.postMessage({ studio: true, type, ...data }, new URL(f.src).origin); }, { type, data });
+};
 const near = (a, b) => assert.ok(Math.abs(a - b) < 0.2, `${a} should match ${b}`);
 async function message(page, type) {
   await page.waitForFunction(type => window.objectMessages.some(m => m.type === type), type);
@@ -140,15 +145,30 @@ test("group selection is atomic, scale stays uniform, cancellation restores chil
 ] } }]));
 
 test("parent toolbar grouping survives save reload scale rotate ungroup and undo without shifting children", () => fixture(async ({ app, deck, page, frame }) => {
+  const arrange = async id => {
+    await page.locator("#ribbon-arrange-tab").click();
+    await page.locator(id).click();
+  };
   const commandAndSave = async action => {
-    const response = page.waitForResponse(r => r.url().endsWith(`/api/decks/${deck.id}/save`) && r.request().method() === "POST");
-    await action();
-    assert.equal((await response).status(), 200);
+    await ready(page);
+    const [response] = await Promise.all([
+      page.waitForResponse(r => r.url().endsWith(`/api/decks/${deck.id}/save`) && r.request().method() === "POST"),
+      action(),
+    ]);
+    assert.equal(response.status(), 200);
     await page.waitForFunction(() => document.querySelector("#saveStatus").textContent.startsWith("저장됨"));
+    await ready(page);
     return (await app.store.get(deck.id)).state;
   };
   const setNumber = async (id, value) => {
+    await page.locator("#ribbon-format-tab").click();
     await page.locator(id).fill(String(value));
+    if (id === "#wValue") {
+      const reports = await page.evaluate(() => objectMessages.filter(message => message.type === "select").length);
+      await frame.locator("body").evaluate(() => window.dispatchEvent(new Event("resize")));
+      await page.waitForFunction(count => objectMessages.filter(message => message.type === "select").length > count, reports);
+      assert.equal(await page.locator(id).inputValue(), String(value), "A resize selection report must not replace a focused geometry draft");
+    }
     await page.locator(id).press("Tab");
   };
   const metrics = locator => locator.evaluate(e => {
@@ -170,7 +190,7 @@ test("parent toolbar grouping survives save reload scale rotate ungroup and undo
   let state = await commandAndSave(() => setNumber("#xValue", 140));
   assert.equal(state.patches["a-text"].x, 140);
   await send(page, "select-ids", { ids: ["a-text", "a-shape", "a-image"] });
-  state = await commandAndSave(() => page.locator("#groupObjectsBtn").click());
+  state = await commandAndSave(() => arrange("#groupObjectsBtn"));
   let group = state.added.find(o => o.kind === "group");
   assert.ok(group);
   await item(frame, group.id).waitFor();
@@ -192,7 +212,7 @@ test("parent toolbar grouping survives save reload scale rotate ungroup and undo
   const before = {};
   for (const [index, child] of children.entries()) before[child.kind] = await metrics(item(frame, group.id).locator(":scope > [data-sd-group-content] > [data-sd-kind]").nth(index));
   await send(page, "select-ids", { ids: [group.id] });
-  state = await commandAndSave(() => page.locator("#ungroupObjectsBtn").click());
+  state = await commandAndSave(() => arrange("#ungroupObjectsBtn"));
   assert.equal(state.added.some(o => o.kind === "group"), false);
   assert.equal(Object.hasOwn(state.patches, group.id), false);
   let ungrouped = state.added.filter(o => !["a-back", "a-front"].includes(o.id));
@@ -221,10 +241,10 @@ test("parent toolbar grouping survives save reload scale rotate ungroup and undo
   ungrouped = state.added.filter(o => !["a-back", "a-front"].includes(o.id));
   await page.reload(); await item(frame, ungrouped[0].id).waitFor();
   await send(page, "select-ids", { ids: ungrouped.map(o => o.id) });
-  state = await commandAndSave(() => page.locator("#groupObjectsBtn").click());
+  state = await commandAndSave(() => arrange("#groupObjectsBtn"));
   group = state.added.find(o => o.kind === "group");
   await item(frame, group.id).waitFor();
-  state = await commandAndSave(() => page.locator("#ungroupObjectsBtn").click());
+  state = await commandAndSave(() => arrange("#ungroupObjectsBtn"));
   ungrouped = state.added.filter(o => !["a-back", "a-front"].includes(o.id));
   for (const child of ungrouped) {
     await item(frame, child.id).waitFor();

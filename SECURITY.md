@@ -23,3 +23,9 @@
 ## 제보
 
 재현 자료는 개인정보와 자산 권리를 제거한 최소 예제로 만드세요. 인증 우회나 자격증명 유출 같은 민감한 취약점은 공개 이슈에 상세 공격 절차를 게시하지 말고 GitHub의 비공개 보안 제보 기능이 활성화되어 있다면 해당 기능을 사용하세요. 활성화되지 않았다면 공개 이슈에는 비민감한 연락 요청만 남겨 주세요. 응답 SLA는 제공하지 않습니다.
+
+발표·공유 화면은 사용자가 설정한 http(s) 링크를 새 탭으로 열 수 있도록 CSP sandbox의 `allow-popups allow-popups-to-escape-sandbox`를 사용합니다. 새 탭에는 opener를 제공하지 않습니다. 업로드한 JavaScript도 이 발표 화면 권한을 가지므로 신뢰할 수 있는 발표 파일만 등록하세요. 편집 iframe과 썸네일은 팝업 권한 없이 기존 격리를 유지하며 외부 리소스·통신·폼 제출 제한은 그대로입니다.
+
+## Local AI integration
+
+The optional `integrations/mcp` process uses the existing authenticated HTTP API; it does not read server data directories. Remote origins must use HTTPS, redirects are rejected, and login cookies stay in process memory. Prefer a private `SLIDES_STUDIO_PASSWORD_FILE` outside this repository; only its path is registered with AI clients. The adapter returns editor links without preview/share tokens. A configured AI client can read and edit the account's decks, so enable its tools only for trusted work. Deck text is untrusted content, not instructions. Saves validate state and require the observed revision; conflicts require a fresh read. ZIP import is limited to regular, non-symlink files inside the explicitly configured workspace and the existing upload limits. The adapter has no publish or deletion tools.

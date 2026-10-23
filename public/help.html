@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>사용 설명서 · 지원 파일 형식 | SDLAB Slides</title>
+    <meta name="description" content="SDLAB Slides의 HTML ZIP·폴더·PPTX 가져오기 조건부터 편집, 저장, 발표, 공유, 다운로드까지 안내합니다." />
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body class="help-page">
+    <a class="help-skip" href="#main">본문으로 이동</a>
+    <header class="help-header">
+      <a class="wordmark" href="/">SDLAB <span>Slides</span></a>
+      <a class="help-link" href="/">자료실로 이동 →</a>
+    </header>
+    <main id="main" class="help-main">
+      <div class="eyebrow">SLIDES GUIDE</div>
+      <h1>발표 자료, 이렇게 시작하세요.</h1>
+      <p class="help-intro">파일을 가져오거나 빈 자료에서 시작해 편집하고, 발표·공유·다운로드까지 이어갈 수 있습니다. 배치 편집은 넓은 PC 화면을 권장합니다.</p>
+      <nav class="help-nav" aria-label="사용 설명서 목차">
+        <a href="#start">빠른 시작</a><a href="#formats">지원 파일</a><a href="#editing">편집 도구</a><a href="#ai">AI·Three.js 작성</a><a href="#export">다운로드</a><a href="#troubleshooting">문제 해결</a>
+      </nav>
+
+      <section id="start" class="help-section">
+        <h2>처음부터 발표까지, 6단계</h2>
+        <ol class="help-steps">
+          <li><strong>자료실에 로그인합니다.</strong> 관리자 암호를 입력하세요. 이 설명서는 로그인 없이 읽을 수 있습니다.</li>
+          <li><strong>자료를 준비합니다.</strong> <b>빈 자료 만들기</b>, <b>HTML ZIP 올리기</b>, <b>폴더로 올리기</b>, <b>PPTX 가져오기</b> 중 하나를 선택합니다. PPTX는 변환 경고를 읽고 <b>변환 결과 가져오기</b>를 눌러야 등록됩니다. 원본 PPTX도 별도로 보관하세요.</li>
+          <li><strong>슬라이드를 편집합니다.</strong> 왼쪽에서 슬라이드를 선택하고, 가운데의 글·이미지를 클릭해 상단 메뉴에서 수정하세요. 글은 더블클릭해 직접 입력할 수 있습니다.</li>
+          <li><strong>자동 저장을 확인합니다.</strong> 상단에 <b>저장됨 · v번호</b>가 표시된 뒤 이동하거나 창을 닫으세요. 이전 내용은 <b>버전</b> 메뉴에서 확인·복원합니다.</li>
+          <li><strong>발표하거나 공유합니다.</strong> <b>발표</b>는 비공개 미리보기입니다. <b>공유</b>에서 게시한 버전만 공유 링크로 볼 수 있습니다. 편집 후에는 공유 버전을 다시 게시해야 반영됩니다. 공유 종료 시 기존 링크는 무효가 됩니다.</li>
+          <li><strong>필요한 형식으로 받습니다.</strong> <b>다운로드</b>에서 HTML ZIP·PDF·PPTX를 선택합니다. 출력 방식별 차이는 <a href="#export">다운로드 안내</a>를 확인하세요.</li>
+        </ol>
+      </section>
+
+      <section id="formats" class="help-section">
+        <h2>어떤 파일을 올릴 수 있나요?</h2>
+        <p><strong>발표 자료 가져오기는 HTML ZIP·폴더와 PPTX만 지원합니다.</strong> 이미지는 자료를 연 뒤 편집기의 이미지 추가에서 넣습니다.</p>
+        <div class="help-table-wrap">
+          <table class="help-table">
+            <caption>가져오기 형식과 제한</caption>
+            <thead><tr><th scope="col">형식</th><th scope="col">준비 방법</th><th scope="col">제한</th></tr></thead>
+            <tbody>
+              <tr><th scope="row">HTML ZIP<br /><code>.zip</code></th><td><code>index.html</code>과 연결된 이미지·CSS·JS·글꼴을 함께 압축합니다.</td><td>40 MiB 이하<br />압축 해제 64 MiB 이하<br />300개 파일 · 80장</td></tr>
+              <tr><th scope="row">HTML 폴더</th><td>같은 웹 원본 폴더를 선택합니다. 브라우저가 ZIP으로 묶어 올립니다.</td><td>전체 64 MiB 이하<br />300개 파일 · 80장<br />생성된 ZIP 40 MiB 이하</td></tr>
+              <tr><th scope="row">PowerPoint<br /><code>.pptx</code></th><td><strong>16:9</strong> 슬라이드만 가능합니다. 변환 경고를 검토한 뒤 가져옵니다.</td><td>40 MiB 이하<br />압축 해제 64 MiB 이하<br />내부 ZIP 항목 2,000개<br />1~80장 · 편집 개체 500개</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="help-note">1 MiB는 1,048,576바이트입니다. PDF·구형 PPT·PPTM·DOCX·HWP·KEY는 직접 가져올 수 없습니다. 파일 이름의 확장자만 ZIP이나 PPTX로 바꾸어도 변환되지 않습니다.</p>
+        <details open>
+          <summary>HTML ZIP·폴더 준비하기</summary>
+          <p>진입 파일 이름은 소문자 <code>index.html</code>로 지정하세요. ZIP 최상위에 두거나 하나의 상위 폴더 아래에 함께 담습니다. 슬라이드는 <code>.slide</code> 요소 또는 같은 부모 아래의 <code>section</code> 요소로 구성하고, 16:9 · 1920×1080을 기준으로 준비합니다.</p>
+          <pre aria-label="HTML 발표 폴더 예시">presentation/
+  index.html
+  style.css
+  app.js
+  images/
+    cover.png
+  fonts/
+    presentation.woff2</pre>
+          <p>HTML에서 자산은 <code>images/cover.png</code>처럼 상대 경로로 연결하세요. 외부 CDN·원격 이미지·글꼴·iframe·API는 격리 정책으로 차단되므로 필요한 자산을 함께 넣어야 합니다.</p>
+          <p><strong>포함 가능한 파일:</strong> .html, .css, .js, .png, .jpg, .jpeg, .webp, .gif, .svg, .ico, .woff, .woff2, .ttf, .otf, .json, .mp4, .webm. 그 외 확장자는 가져오지 않습니다. 숨김 파일·환경파일·심볼릭 링크는 빼고, 분할 ZIP·ZIP64는 사용하지 마세요.</p>
+          <p>MP4·WebM은 패키지에 포함할 수 있지만 영상 편집이나 모든 출력 형식에서의 재생을 보장하지 않습니다. HTML 파일 하나만 있다면 그 파일을 ZIP으로 묶거나 포함된 폴더를 선택하세요.</p>
+        </details>
+        <details>
+          <summary>PPTX 변환에서 확인할 점</summary>
+          <p>지원되는 글·이미지·기본 도형·표·차트·노트를 웹 편집 요소로 변환합니다. 복잡한 배치·마스터·SmartArt·일부 효과는 그대로 재현되지 않거나 생략될 수 있습니다. 가져오기 전 경고와 가져온 후 각 슬라이드의 내용을 확인하세요.</p>
+          <p>4:3 자료는 PowerPoint에서 16:9로 바꾸고 배치를 확인한 뒤 PPTX로 저장하세요. 암호화된 자료는 암호를 해제한 사본을 준비해야 합니다. 원본과 똑같은 외형이 필요한 경우 변환 결과를 반드시 비교하세요.</p>
+        </details>
+        <details>
+          <summary>편집기에서 이미지 추가하기</summary>
+          <p>오른쪽 <b>이미지</b> 버튼은 PNG·JPEG·WebP·GIF를 받습니다. HTML 패키지 안의 SVG·ICO와 이미지 추가 버튼의 지원 범위는 다릅니다. 추가한 이미지도 자료의 파일 수·용량 제한에 포함됩니다.</p>
+        </details>
+      </section>
+
+      <section id="editing" class="help-section">
+        <h2>자주 쓰는 편집 도구</h2>
+        <details open><summary>글·이미지·도형과 배치</summary>
+          <p>상단에서 글·이미지·도형·표·차트를 추가합니다. 글을 더블클릭하고 일부 문자를 선택하면 해당 부분의 서식을 바꿀 수 있습니다. 상단 <b>내용 편집</b> 입력은 전체 평문을 바꾸므로 부분 서식을 유지하려면 직접 편집하세요.</p>
+          <p>개체를 드래그해 이동하고 핸들로 크기·회전을 조절합니다. Shift·Ctrl·Command와 클릭으로 여러 개체를 선택한 뒤 정렬·분배합니다. 잠긴 개체는 레이어에서 잠금을 해제한 뒤 수정하세요.</p>
+        </details>
+        <details><summary>표·차트와 링크 · 페이지 이동</summary>
+          <p>표와 차트의 셀을 직접 눌러 입력하고, 행·열을 추가하거나 삭제하세요. 스프레드시트에서 복사한 셀도 붙여넣을 수 있습니다. 차트 종류와 계열 색은 선택 도구로 바꿉니다.</p>
+          <p>요소 하나를 선택한 뒤 상단 <b>링크</b>에서 웹 주소 또는 슬라이드 목록의 이동 대상을 지정합니다. 발표·공유·HTML에서 작동하며 웹 주소는 새 탭으로 열립니다. 편집 중에는 링크가 실행되지 않습니다. 연결된 슬라이드를 삭제하면 링크를 다시 지정하세요. PDF·PPTX 링크는 지원하지 않습니다.</p>
+        </details>
+        <details><summary>슬라이드·노트·테마·효과</summary>
+          <p>왼쪽 목록에서 슬라이드를 추가·복제·삭제하거나 끌어 순서를 바꿉니다. Ctrl·Command 클릭은 다중 선택, Shift 클릭은 범위 선택입니다.</p>
+          <p><b>레이아웃</b>은 제목·본문·두 단 구성을, <b>테마</b>는 공통 색·글꼴을 지정합니다. <b>전환·효과</b>는 발표 재생에 적용됩니다. 편집 화면과 PDF는 최종 정지 모습을 보여줍니다.</p>
+          <p><strong>발표자 노트는 공유·HTML·PPTX에도 포함됩니다.</strong> 외부에 알리면 안 되는 내용을 적지 마세요.</p>
+        </details>
+        <details><summary>단축키와 이전 버전</summary>
+          <ul><li>Ctrl·Command+Z: 실행 취소 / Ctrl·Command+Shift+Z: 다시 실행</li><li>Ctrl·Command+D: 선택한 개체 복제</li><li>방향키: 1px 이동 / Shift+방향키: 10px 이동</li><li>Tab·Shift+Tab: 캔버스에서 선택한 개체의 다음·이전 개체 선택. 끝에서는 일반 포커스 이동</li><li>Escape: 진행 중인 드래그 취소 또는 선택 해제</li></ul>
+          <p>입력창·글 편집 중에는 문자 입력이 우선합니다. 실행 취소는 현재 편집 세션에서 사용하며, 오래된 상태는 상단 <b>버전</b>에서 복원하세요. 복원 결과는 새 버전으로 저장됩니다.</p>
+        </details>
+        <details><summary>발표 화면과 키보드 이동</summary>
+          <p>발표는 16:9 한 장을 창 크기에 맞춰 보여 주고 하단에 이전·현재 장수·다음·전체 화면 버튼을 표시합니다. →·↓·PageDown·Space는 다음 장, ←·↑·PageUp·Shift+Space는 이전 장, Home·End는 첫 장·마지막 장입니다.</p>
+          <p>Tab으로 링크·버튼에 이동하고 Enter로 실행합니다. 입력창·링크·버튼의 기본 키 동작은 유지합니다. 전체 화면은 브라우저가 허용할 때 사용할 수 있습니다.</p>
+        </details>
+        <details><summary>파일 관리와 고급 편집</summary>
+          <p><b>파일 관리</b>에서 자산과 용량을 확인하고 웹 원본을 내려받을 수 있습니다. 사용 중인 파일과 이전 버전이 참조하는 파일은 삭제가 제한됩니다.</p>
+          <p><b>HTML/CSS</b>·<b>JSON</b>·<b>마스터</b>는 구조를 직접 다루는 고급 도구입니다. 변경 전에 버전과 다운로드 사본을 확보하세요. Three.js 배경과 원본이 제공하는 장면은 유지하지만 임의 3D 모델·카메라의 시각 편집은 지원하지 않습니다.</p>
+        </details>
+      </section>
+
+      <section id="ai" class="help-section">
+        <h2>AI로 만들고, 여기서 편집하세요</h2>
+        <p>AI에게 아래 작성 조건을 전달해 HTML ZIP을 만든 뒤 <b>HTML ZIP 올리기</b>로 가져옵니다. 대괄호를 채우고, 완성한 자료에서 글 수정·저장·발표까지 확인하세요.</p>
+        <details open><summary>복사해서 쓰는 AI 작성 프롬프트</summary>
+          <p id="ai-copy-help">아래 입력칸을 클릭한 뒤 Ctrl·Command+A로 전체 선택하고 Ctrl·Command+C로 복사하세요. 대괄호는 AI에 붙여넣은 뒤 바꿉니다.</p>
+          <label class="authoring-field">AI 작성 프롬프트<textarea readonly rows="18" aria-describedby="ai-copy-help">Web Slides Studio에서 가져와 편집할 HTML 발표 자료를 실제 파일과 ZIP으로 만들어 주세요.
+주제: [주제] / 청중: [청중] / 발표 길이: [분 또는 장수]
+자료: [본문·첨부·출처] / 원하는 분위기: [선택]
+
+작성자 → 디자이너 → 검수자 순서로 작업하세요. 장별 핵심 메시지를 정리하고,
+제공 자료에 없는 사실은 확인하거나 가정으로 표시하세요.
+
+16:9, 1920×1080의 main#stage 안에 같은 부모를 둔 section.slide를 만드세요.
+한 번에 한 장만 표시하고, 글은 수정 가능한 DOM 텍스트로 남겨 주세요.
+index.html과 상대 경로의 CSS·JS·이미지·글꼴을 ZIP에 함께 넣으세요.
+외부 CDN·API·fetch·iframe·worker에 의존하지 마세요.
+
+Three.js는 설명에 도움이 될 때만 쓰고 로컬 .js 라이브러리로 묶으세요.
+기본 도형·절차적 그래픽을 사용하고 .gltf/.glb/.bin 모델은 넣지 마세요.
+장식 canvas는 글 뒤에 두고 pointer-events:none을 적용하세요.
+WebGL 실패·동작 줄이기 설정에서도 읽을 수 있는 정지 대안을 제공하세요.
+Studio의 키보드·발표 이동과 충돌하지 않게 하고 Tab을 전역 차단하지 마세요.
+
+ZIP 40 MiB, 압축 해제 64 MiB, 300파일, 1~80장 이내로 준비하세요.
+모든 장의 잘림·자산 누락·한글·이동·링크를 확인하세요.
+가능하면 Studio에 가져온 뒤 글 수정→저장→새로고침까지 검증하세요.
+MCP로 기존 자료를 수정할 때는 현재 상태와 revision을 읽고 충돌 시 다시 확인하세요.
+HTML/CSS 편집창에는 슬라이드 내부 HTML/CSS만 넣고 JS·canvas를 붙이지 마세요.
+PDF는 이미지이며, 편집 가능 PPTX도 3D·복잡한 CSS는 배경 이미지임을 알려 주세요.
+완료하면 ZIP/원본 파일 또는 편집 링크와 실제 검사 결과·미확인 항목을 주세요.</textarea></label>
+        </details>
+        <details><summary>Three.js·애니메이션을 사용할 때</summary>
+          <p>Three.js는 <strong>원본 HTML ZIP에 로컬 .js 라이브러리</strong>로 포함합니다. 기본 도형·절차적 그래픽을 사용하세요. 외부 CDN·원격 자산·iframe·worker와 로컬·외부 fetch는 차단됩니다. .gltf·.glb·.bin·.mjs는 가져오지 않습니다.</p>
+          <p>글은 canvas가 아닌 HTML 텍스트로 남기고 장식 canvas에는 <code>pointer-events:none</code>을 적용합니다. WebGL 실패·동작 줄이기 설정에서도 내용을 읽을 수 있는 정지 대안을 두세요. <code>#bg</code> 또는 <code>canvas[data-background]</code>는 배경 표시 설정에 연결됩니다. <code>data-scene</code> 장면은 원본 코드에서 구현해야 하며 임의 3D 모델·카메라의 시각 편집은 지원하지 않습니다.</p>
+          <p><b>HTML/CSS</b> 편집창은 슬라이드 내부 HTML/CSS만 받습니다. JavaScript·canvas를 붙일 수 없습니다. 실행 코드를 바꾸려면 원본 묶음을 수정해 새 자료로 가져오세요. PDF·PPTX의 3D는 정지 이미지입니다.</p>
+        </details>
+        <details><summary>Codex·Claude Code 스킬과 MCP 연결</summary>
+          <p><b>web-slides-author</b> 스킬은 작성자·디자이너·검수자 순서로 발표를 만듭니다. MCP를 연결하면 AI가 자료 목록과 현재 버전을 읽고, 허용된 ZIP을 가져오거나 한 장을 수정할 수 있습니다. 변경 충돌 시에는 최신 상태를 다시 읽습니다.</p>
+          <p>설치는 서버 운영 또는 로컬 개발 환경에서 진행합니다. <a href="https://github.com/no1fc/web-slides-studio/blob/main/docs/AI_AUTHORING.md" target="_blank" rel="noopener noreferrer">AI 작성·스킬·MCP 설치 안내 ↗</a>에서 명령과 지원 범위를 확인하세요. 암호값은 대화·발표에 넣지 말고 비공개 암호 파일로 연결합니다.</p>
+        </details>
+      </section>
+
+      <section id="export" class="help-section">
+        <h2>다운로드 형식 고르기</h2>
+        <dl class="help-exports">
+          <div><dt>HTML ZIP</dt><dd>웹 발표용입니다. 자산을 함께 보관합니다. 단순 자료는 index.html을 열고, Three.js 등 ES module을 쓰는 자료는 압축을 푼 폴더를 로컬 HTTP 서버로 여세요.</dd></div>
+          <div><dt>PDF</dt><dd>16:9 정지 이미지로 출력합니다. 문서 안의 글 검색·선택은 지원하지 않습니다.</dd></div>
+          <div><dt>PPTX · 외형 보존</dt><dd>각 슬라이드를 하나의 이미지로 넣습니다. 외형을 우선할 때 선택하며 글·도형을 개별 편집할 수 없습니다.</dd></div>
+          <div><dt>PPTX · 편집 가능</dt><dd>지원되는 요소를 편집 가능한 개체로 출력합니다. 복잡한 CSS·3D 등은 배경 이미지가 됩니다. 글꼴·줄바꿈·효과는 PowerPoint에서 확인하세요.</dd></div>
+        </dl>
+        <p>가져오기와 다운로드의 지원 형식은 다릅니다. PDF로 내려받을 수 있어도 PDF를 다시 가져와 편집할 수는 없습니다.</p>
+      </section>
+
+      <section id="troubleshooting" class="help-section">
+        <h2>막혔을 때 확인하세요</h2>
+        <details><summary>“index.html 하나를 포함해 주세요” 또는 “자산 누락”</summary><p>파일 이름과 폴더 구조를 확인하세요. 연결된 이미지·CSS·JS·글꼴을 함께 압축하고 HTML의 상대 경로가 실제 파일 경로와 일치하는지 확인합니다.</p></details>
+        <details><summary>업로드 용량·파일 수 제한을 넘었습니다</summary><p>이미지·영상을 줄이고 사용하지 않는 파일을 제거하세요. ZIP 크기와 압축 해제 크기는 별도로 제한합니다. 큰 발표는 여러 자료로 나누세요.</p></details>
+        <details><summary>그림·배경·글꼴이 원본과 다릅니다</summary><p>외부 주소에 의존하는 자산을 로컬 파일로 포함하세요. PPTX라면 가져오기 경고를 확인합니다. 모든 HTML 프레임워크·PowerPoint 기능이 자동으로 재현되지는 않습니다.</p></details>
+        <details><summary>저장이 안 되거나 다른 창의 변경 알림이 나옵니다</summary><p>저장 상태와 오류 안내를 먼저 확인하세요. 공동 편집은 지원하지 않으므로 같은 자료를 편집하는 다른 창을 정리하고, 충돌 안내에 따라 최신 버전을 확인합니다. 저장 실패 상태에서 창을 닫지 마세요.</p></details>
+        <details><summary>수정한 내용이 공유 링크에 보이지 않습니다</summary><p>자동 저장은 개인 자료를 갱신합니다. 공유 화면에서 최신 버전을 다시 게시해야 링크에 반영됩니다. 휴지통 이동 또는 공유 종료 후에는 기존 링크가 무효가 됩니다.</p></details>
+        <details><summary>삭제한 자료를 되찾고 싶습니다</summary><p>사이드바 <b>휴지통</b>에서 복원하세요. <b>완전 삭제</b>한 자료는 앱에서 복원할 수 없으며 별도 서버 백업이 필요합니다. 자동 백업은 기본 제공되지 않습니다.</p></details>
+      </section>
+      <footer class="help-footer">안내 기준: 2026년 10월 23일 · <a href="#main">맨 위로 ↑</a></footer>
+    </main>
+  </body>
+</html>

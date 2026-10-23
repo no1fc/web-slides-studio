@@ -120,7 +120,10 @@ test("duplicated source text keeps formatting, new IDs and independence and can 
   assert.equal(await copied.evaluate(e => getComputedStyle(e).color), "rgb(10, 100, 90)");
   await page.locator('[data-layer-id="e0"] [data-layer-action="select"]').click();
   await page.waitForFunction(() => document.querySelector('[data-layer-id="e0"] [data-layer-action="select"]').getAttribute("aria-pressed") === "true");
+  await page.locator("#ribbon-format-tab").click();
+  await page.locator("#textContentSettingsBtn").click();
   await page.locator("#textValue").fill("원본만 변경"); await page.locator("#textValue").dispatchEvent("change");
+  await page.locator("#textContentSettings").getByRole("button", {name:"닫기",exact:true}).click();
   assert.match(await copied.textContent(), /복제할/);
   await copied.click(); await page.keyboard.press("Control+c");
   await page.locator("#slideList .slide-item").nth(1).click();
@@ -135,6 +138,7 @@ test("layer ordering persists when a sibling is locked and does not unlock or mo
   await send(page, "layer-toggle", { id: "a-two", key: "locked" }); await waitChange(page, 1);
   await item(frame, "a-one").click();
   const response = page.waitForResponse(r => r.url().endsWith("/save") && r.request().method() === "POST");
+  await page.locator("#ribbon-arrange-tab").click();
   await page.locator("#layerFrontBtn").click(); await waitChange(page, 2); await response;
   const current = await app.store.get(deck.id);
   assert.ok(current.state.patches["a-one"].z > current.state.patches["a-two"].z);
@@ -165,10 +169,12 @@ test("alignment and vertical distribution measure the visible bounds of rotated 
   await item(frame, "a-three").click();
   await page.locator("#rotateValue").fill("30"); await page.locator("#rotateValue").dispatchEvent("change");
   await send(page, "select-ids", { ids: ["a-one", "a-two", "a-three"] });
+  await page.locator("#ribbon-arrange-tab").click();
   await page.locator("#alignRightBtn").click(); await waitChange(page, 1);
   const rectangles = async () => Promise.all(["a-one", "a-two", "a-three"].map(id => item(frame, id).evaluate(e => { const r = e.getBoundingClientRect(); return { right: r.right, top: r.top, bottom: r.bottom }; })));
   let rects = await rectangles(); near(rects[0].right, rects[1].right); near(rects[1].right, rects[2].right);
   const edges = [rects[0].top, rects[2].bottom];
+  await page.locator("#ribbon-arrange-tab").click();
   await page.locator("#distributeYBtn").click(); await waitChange(page, 2);
   rects = await rectangles(); near(rects[0].top, edges[0]); near(rects[2].bottom, edges[1]);
   near(rects[1].top - rects[0].bottom, rects[2].top - rects[1].bottom);
@@ -185,7 +191,10 @@ test("a duplicated title retains editable font and color through reload and repe
   const emphasis = copy.locator("[data-sd-run]").filter({ hasText: "제목" });
   assert.equal(await emphasis.evaluate(e => getComputedStyle(e).fontSize), "64px");
   assert.equal(await emphasis.evaluate(e => getComputedStyle(e).color), "rgb(170, 34, 51)");
+  await page.locator("#ribbon-format-tab").click();
+  await page.locator("#textContentSettingsBtn").click();
   await page.locator("#textValue").fill("새 제목"); await page.locator("#textValue").dispatchEvent("change");
+  await page.locator("#textContentSettings").getByRole("button", {name:"닫기",exact:true}).click();
   assert.equal(await copy.evaluate(e => getComputedStyle(e).fontSize), "64px");
   await saved(page); await page.reload(); await copy.waitFor();
   assert.equal(await copy.textContent(), "새 제목");

@@ -17,7 +17,7 @@ async function fixture(run) {
     const page=await browser.newPage({viewport:{width:1600,height:1000}});page.setDefaultTimeout(8000);
     const errors=[];page.on('pageerror',e=>errors.push(e.message));
     await page.goto(app.origin+'/#deck='+deck.id);
-    const ready=()=>page.waitForFunction(()=>typeof frameReady!=='undefined'&&frameReady&&!transitionBusy);
+    const ready=()=>page.waitForFunction(()=>typeof frameReady!=='undefined'&&frameReady&&!transitionBusy&&!objectBusy);
     await ready();
     const saved=async()=>{await page.waitForFunction(()=>!dirty&&!saving&&!transitionBusy);return (await app.store.get(deck.id)).state;};
     await run({page,app,deck,ready,saved,browser});assert.deepEqual(errors,[]);
@@ -25,14 +25,16 @@ async function fixture(run) {
 }
 test('table cell editing, native selection, duplication, undo and reload retain data',()=>fixture(async({page,ready,saved})=>{
   await page.locator('#addTableBtn').click();
-  await page.locator('#dataGridValue').fill('이름\t값\n한국어\t42');
+  await page.getByRole('textbox',{name:'1행 1열',exact:true}).fill('이름');
+  await page.getByRole('textbox',{name:'2행 1열',exact:true}).fill('한국어');
+  await page.getByRole('textbox',{name:'2행 2열',exact:true}).fill('42');
   await page.locator('#applyDataBtn').click();await ready();let state=await saved();
   assert.equal(state.added.length,1);const id=state.added[0].id;
   await page.waitForFunction(id=>selected?.id===id,id);
   assert.equal(await page.locator('#rotateValue').isDisabled(),true);
   assert.equal(await page.locator('#groupObjectsBtn').isDisabled(),true);
   assert.equal(await page.evaluate(()=>selected.groupable),false);
-  await page.locator('#editDataBtn').click();await page.locator('#dataGridValue').fill('이름\t값\n바뀐 셀\t84');await page.locator('#applyDataBtn').click();await ready();
+  await page.locator('#editDataBtn').click();await page.locator('#dataBulkDetails').waitFor({state:'visible'});await page.locator('#dataBulkDetails').evaluate(el=>el.open=true);await page.locator('#dataGridValue').fill('이름\t값\n바뀐 셀\t84');await page.locator('#applyDataBtn').click();await ready();
   state=await saved();assert.equal(state.patches[id].table.rows[1][0],'바뀐 셀');
   await page.waitForFunction(id=>selected?.id===id,id);
   await page.locator('#duplicateObjectsBtn').click();await ready();
@@ -41,10 +43,10 @@ test('table cell editing, native selection, duplication, undo and reload retain 
   await page.reload();await ready();state=await saved();assert.equal(state.patches[id].table.rows[1][0],'바뀐 셀');
 }));
 test('chart validation, effects, slide duplication and static export viewer retain coherent state',()=>fixture(async({page,ready,saved,app,deck,browser})=>{
-  await page.locator('#addChartBtn').click();await page.locator('#dataGridValue').fill('항목\t매출\n1분기\tbad');await page.locator('#applyDataBtn').click();
+  await page.locator('#addChartBtn').click();await page.locator('#dataBulkDetails').waitFor({state:'visible'});await page.locator('#dataBulkDetails').evaluate(el=>el.open=true);await page.locator('#dataGridValue').fill('항목\t매출\n1분기\tbad');await page.locator('#applyDataBtn').click();
   await page.waitForFunction(()=>document.querySelector('#dataEditError').textContent.length>0);assert.equal((await saved()).added.length,0);
-  await page.locator('#dataGridValue').fill('항목\t매출\n1분기\t12\n2분기\t18');await page.locator('#applyDataBtn').click();await ready();let state=await saved();const id=state.added[0].id;
-  await page.waitForFunction(id=>selected?.id===id,id);await page.locator('#effectsBtn').click();await page.locator('#transitionValue').selectOption('push');await page.locator('#animationValue').selectOption('fade');await page.locator('#applyEffectsBtn').click();await ready();state=await saved();assert.equal(state.animations[id],'fade');
+  await page.locator('#dataBulkDetails').waitFor({state:'visible'});await page.locator('#dataBulkDetails').evaluate(el=>el.open=true);await page.locator('#dataGridValue').fill('항목\t매출\n1분기\t12\n2분기\t18');await page.locator('#applyDataBtn').click();await ready();let state=await saved();const id=state.added[0].id;
+  await page.waitForFunction(id=>selected?.id===id,id);await page.locator('#ribbon-slide-tab').click();await page.locator('#effectsBtn').click();await page.locator('#transitionValue').selectOption('push');await page.locator('#animationValue').selectOption('fade');await page.locator('#applyEffectsBtn').click();await ready();state=await saved();assert.equal(state.animations[id],'fade');
   await page.locator('#duplicateSlideBtn').click();await ready();state=await saved();const duplicate=state.added.find(a=>a.slide!== 's0');assert.equal(state.transitions[duplicate.slide],'push');assert.equal(state.animations[duplicate.id],'fade');
   const current=await app.store.get(deck.id),viewer=await browser.newPage({viewport:{width:1920,height:1080}});
   await viewer.goto(`${app.contentOrigin}/v/${deck.id}/${current.previewToken}/index.html?rev=${current.revision}`);await viewer.waitForFunction(()=>!!window.__sd);
@@ -69,11 +71,11 @@ test('PPTX import previews warnings without creating a deck and creates only aft
 }));
 test('data dialog locks during save and quoted multiline cells survive a no-op edit',()=>fixture(async({page,ready,saved})=>{
   await page.locator('#addTableBtn').click();
-  await page.locator('#dataGridValue').fill('"줄1\n줄2"\t"탭\t셀"\n""\t끝');
+  await page.locator('#dataBulkDetails').waitFor({state:'visible'});await page.locator('#dataBulkDetails').evaluate(el=>el.open=true);await page.locator('#dataGridValue').fill('"줄1\n줄2"\t"탭\t셀"\n""\t끝');
   let release;const gate=new Promise(resolve=>{release=resolve;});
   await page.route('**/validate',async route=>{await gate;await route.continue();});
   await page.locator('#applyDataBtn').click();
-  assert.equal(await page.locator('#closeDialog').isDisabled(),true);assert.equal(await page.locator('#dataGridValue').isDisabled(),true);
+  assert.equal(await page.locator('#closeDialog').isDisabled(),true);assert.equal(await page.locator('#dataGridValue').isDisabled(),true);assert.equal(await page.locator('#dataGrid textarea').first().isDisabled(),true);assert.equal(await page.locator('#dataAddRowBtn').isDisabled(),true);
   await page.keyboard.press('Escape');assert.equal(await page.locator('#dialog').isVisible(),true);
   release();await ready();let state=await saved();const id=state.added[0].id,rows=state.added[0].table.rows;
   assert.deepEqual(rows,[['줄1\n줄2','탭\t셀'],['','끝']]);await page.waitForFunction(id=>selected?.id===id,id);
@@ -100,15 +102,71 @@ test('group and ungroup preserve a shared entrance effect and reject mixed effec
     await page.evaluate(ids=>post('select-ids',{ids}),ids);
     await page.waitForFunction(ids=>selectedElements.length===ids.length&&ids.every(id=>selectedElements.some(e=>e.id===id)),ids);
   };
-  await select(['a-one','a-two']);await page.locator('#groupObjectsBtn').click();
+  await select(['a-one','a-two']);await page.locator('#ribbon-arrange-tab').click();await page.locator('#groupObjectsBtn').click();
   await page.waitForFunction(()=>state.added.length===1&&state.added[0].kind==='group');await ready();
   let state=await saved();const group=state.added[0];assert.deepEqual(state.animations,{[group.id]:'fade'});
   await select([group.id]);await page.locator('#ungroupObjectsBtn').click();
   await page.waitForFunction(()=>state.added.length===2&&state.added.every(o=>o.kind==='shape'));await ready();
   state=await saved();assert.equal(Object.keys(state.animations).length,2);assert.ok(state.added.every(o=>state.animations[o.id]==='fade'));
   const ids=state.added.map(o=>o.id);await select([ids[0]]);
-  await page.locator('#effectsBtn').click();await page.locator('#animationValue').selectOption('appear');await page.locator('#applyEffectsBtn').click();await ready();
-  const before=await saved();await select(ids);await page.locator('#groupObjectsBtn').click();
+  await page.locator('#ribbon-slide-tab').click();await page.locator('#effectsBtn').click();await page.locator('#animationValue').selectOption('appear');await page.locator('#applyEffectsBtn').click();await ready();
+  const before=await saved();await select(ids);await page.locator('#ribbon-arrange-tab').click();await page.locator('#groupObjectsBtn').click();
   await page.getByText('서로 다른 진입 효과가 있습니다. 효과를 같게 맞춘 뒤 그룹으로 묶어 주세요.',{exact:true}).waitFor();
   assert.deepEqual(await saved(),before);
+}));
+
+const cell=(page,row,col)=>page.getByRole('textbox',{name:`${row}행 ${col}열`,exact:true});
+const pasteCells=(target,text)=>target.evaluate((element,text)=>{
+  const clipboardData=new DataTransfer();clipboardData.setData('text/plain',text);
+  element.dispatchEvent(new ClipboardEvent('paste',{clipboardData,bubbles:true,cancelable:true}));
+},text);
+
+test('visual grid adds and removes selected rows and columns, pastes TSV and persists',()=>fixture(async({page,ready,saved})=>{
+  await page.locator('#addTableBtn').click();
+  assert.equal(await page.locator('#dataBulkDetails').getAttribute('open'),null);
+  await page.locator('#dataAddRowBtn').click();await cell(page,4,1).fill('새 행');
+  await page.locator('#dataAddColumnBtn').click();await cell(page,4,3).fill('삭제할 열');
+  await cell(page,2,3).focus();await page.locator('#dataRemoveColumnBtn').click();
+  await cell(page,3,1).focus();await page.locator('#dataRemoveRowBtn').click();
+  assert.equal(await cell(page,3,1).inputValue(),'새 행');
+  await pasteCells(cell(page,2,1),'서울\t25\n부산\t30\n대전\t40');
+  assert.equal(await cell(page,4,2).inputValue(),'40');
+  await page.locator('#applyDataBtn').click();await ready();
+  let state=await saved();assert.deepEqual(state.added[0].table.rows,[['항목','값'],['서울','25'],['부산','30'],['대전','40']]);
+  await page.reload();await ready();state=await saved();assert.equal(state.added[0].table.rows[3][0],'대전');
+}));
+
+test('grid limits reject oversized paste without losing cells and bulk edits stay synchronized',()=>fixture(async({page})=>{
+  await page.locator('#addTableBtn').click();
+  await pasteCells(cell(page,1,1),Array.from({length:20},(_,r)=>Array.from({length:10},(_,c)=>`${r}:${c}`).join('\t')).join('\n'));
+  assert.equal(await page.locator('#dataAddRowBtn').isDisabled(),true);assert.equal(await page.locator('#dataAddColumnBtn').isDisabled(),true);
+  await pasteCells(cell(page,20,10),'overflow\tvalue');
+  assert.equal(await cell(page,20,10).inputValue(),'19:9');assert.match(await page.locator('#dataEditError').innerText(),/최대/);
+  await page.locator('#dataBulkDetails').waitFor({state:'visible'});await page.locator('#dataBulkDetails').evaluate(el=>el.open=true);
+  await page.locator('#dataGridValue').fill('A\tB\nC');
+  assert.equal(await cell(page,1,1).isDisabled(),true);
+  await page.locator('#dataGridValue').fill('one');
+  assert.equal(await cell(page,1,1).inputValue(),'one');assert.equal(await cell(page,1,1).isDisabled(),false);
+  assert.equal(await page.locator('#dataRemoveRowBtn').isDisabled(),true);assert.equal(await page.locator('#dataRemoveColumnBtn').isDisabled(),true);
+  await cell(page,1,1).fill('two');assert.equal(await page.locator('#dataGridValue').inputValue(),'two');
+}));
+
+test('chart cells validate numeric input and save chart type and series colors',()=>fixture(async({page,ready,saved})=>{
+  await page.locator('#addChartBtn').click();
+  await cell(page,1,1).focus();assert.equal(await page.locator('#dataRemoveRowBtn').isDisabled(),true);assert.equal(await page.locator('#dataRemoveColumnBtn').isDisabled(),true);
+  await cell(page,2,2).fill('not a number');await page.locator('#applyDataBtn').click();
+  await page.waitForFunction(()=>document.querySelector('#dataEditError').textContent.length>0);assert.match(await page.locator('#dataEditError').innerText(),/숫자/);assert.equal((await saved()).added.length,0);
+  await cell(page,2,2).fill('12');await cell(page,1,2).fill('매출');
+  await page.locator('#dataAddColumnBtn').click();await cell(page,1,3).fill('비용');
+  await page.locator('#chartColor-1').fill('#123456');await page.locator('#chartTypeValue').selectOption('line');
+  await page.locator('#applyDataBtn').click();await ready();let state=await saved();
+  assert.equal(state.added[0].chart.type,'line');assert.equal(state.added[0].chart.series[0].values[0],12);
+  assert.equal(state.added[0].chart.series[1].name,'비용');assert.equal(state.added[0].chart.colors[1],'#123456');
+  await page.waitForFunction(()=>selected?.id===state.added[0].id);await page.locator('#editDataBtn').click();
+  await page.locator('#chartTypeValue').selectOption('pie');await page.locator('#applyDataBtn').click();await page.waitForFunction(()=>document.querySelector('#dataEditError').textContent.length>0);assert.match(await page.locator('#dataEditError').innerText(),/한 계열/);
+  await cell(page,2,3).focus();await page.locator('#dataRemoveColumnBtn').click();
+  await cell(page,2,2).fill('-1');await page.locator('#applyDataBtn').click();await page.waitForFunction(()=>document.querySelector('#dataEditError').textContent.length>0);assert.match(await page.locator('#dataEditError').innerText(),/음이 아닌/);
+  await cell(page,2,2).fill('12');await page.locator('#chartColor-2').fill('#abcdef');await page.locator('#applyDataBtn').click();await ready();state=await saved();
+  const id=state.added[0].id;assert.equal(state.patches[id].chart.type,'pie');assert.equal(state.patches[id].chart.colors[2],'#abcdef');
+  await page.reload();await ready();assert.equal((await saved()).patches[id].chart.colors[2],'#abcdef');
 }));

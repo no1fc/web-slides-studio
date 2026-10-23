@@ -1,0 +1,17 @@
+{
+  "name": "slides-studio-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Local stdio MCP adapter for Slides Studio's authenticated HTTP API",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "zod": "4.6.7"
+  },
+  "engines": { "node": ">=20.19" },
+  "license": "MIT"
+}

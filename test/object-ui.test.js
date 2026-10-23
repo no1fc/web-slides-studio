@@ -60,6 +60,7 @@ async function fixture(fn) {
 
 test("shape inspector edits native geometry and border, preserving legacy shape fill", () => fixture(async ({ page, select, change, saved }) => {
   await select(info("a-one", { shape }));
+  await page.locator("#shapeSettingsBtn").click();
   assert.equal(await page.locator("#shapeTools").isVisible(), true);
   assert.equal(await page.locator("#textField").isHidden(), true);
   await change("shapeTypeValue", "ellipse");
@@ -69,6 +70,7 @@ test("shape inspector edits native geometry and border, preserving legacy shape 
   await page.locator("#shapeNoFillValue").check();
   const d = await saved(), p = d.state.patches["a-one"].shape;
   assert.deepEqual(p, { ...shape, type: "ellipse", stroke: "#ff3300", strokeWidth: 7, dash: "dash", fill: "none" });
+  if (await page.locator("#shapeSettings").evaluate(el => el.open)) await page.keyboard.press("Escape");
   await page.locator("#undoBtn").click();
   await page.waitForFunction(() => document.querySelector("#saveStatus").textContent.startsWith("저장됨"));
   assert.equal((await saved()).state.patches["a-one"].shape.fill, shape.fill);
@@ -76,6 +78,7 @@ test("shape inspector edits native geometry and border, preserving legacy shape 
 
 test("image inspector stores non-destructive crop, rejects empty crop and resets", () => fixture(async ({ page, select, change, saved }) => {
   await select(info("a-image", { tag: "img", kind: "image", image, w: 400, h: 200 }));
+  await page.locator("#imageSettingsBtn").click();
   await change("imageModeValue", "fit");
   await change("cropLeftValue", "20");
   await change("cropRightValue", "10");
@@ -104,6 +107,7 @@ test("group consumes exactly selected native sources in one undo command", () =>
   const group = d.state.added.find(a => a.kind === "group");
   assert.equal(group.group.children.length, 2);
   assert.equal(d.state.added.some(a => a.id === "a-one"), false);
+  if (await page.locator("#shapeSettings").evaluate(el => el.open)) await page.keyboard.press("Escape");
   await page.locator("#undoBtn").click();
   d = await saved();
   assert.deepEqual(d.state.added, deck.state.added);

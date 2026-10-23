@@ -112,6 +112,7 @@ async function settleEditing() {
   await objectWork;
 }
 function transitionTools() {
+  window.SDLinkUI?.update();
   for (const id of ["sceneValue", "backgroundValue", "undoBtn", "redoBtn", "addSlideBtn", "removeSlideBtn", "duplicateSlideBtn", "upSlideBtn", "downSlideBtn", "layoutBtn", "themeBtn", "notesValue", "addTableBtn", "addChartBtn", "effectsBtn"]) $(id).disabled = transitionBusy;
   $("slideList").querySelectorAll("button").forEach(button => { button.disabled = transitionBusy; });
 }
@@ -325,7 +326,14 @@ async function history(back) {
 function performHistory(back) {
   return transitionAction(() => history(back), back ? "실행 취소 중…" : "다시 실행 중…")();
 }
+function propertyValue(id, value) {
+  const control = $(id), objectId = selected?.id || "";
+  // Iframe resize reports must not replace a draft being typed for the same object.
+  if (document.activeElement !== control || control.dataset.objectId !== objectId) control.value = value;
+  control.dataset.objectId = objectId;
+}
 function properties() {
+  window.SDLinkUI?.update();
   const s = selected;
   $("noSelection").hidden = !!s;
   $("properties").hidden = !s;
@@ -345,7 +353,7 @@ function properties() {
   $("textField").hidden = s.tag === "img" || ["image", "shape", "group", "table", "chart"].includes(s.kind);
   $("rotateValue").disabled ||= ["table", "chart"].includes(s.kind);
   $("replaceImageBtn").hidden = s.tag !== "img";
-  $("textValue").value = s.text;
+  propertyValue("textValue", s.text);
   for (const [id, key] of [
     ["xValue", "x"],
     ["yValue", "y"],
@@ -354,7 +362,7 @@ function properties() {
     ["rotateValue", "rotate"],
     ["fillValue", "fill"],
   ])
-    $(id).value = s[key] ?? 0;
+    propertyValue(id, s[key] ?? 0);
 }
 function nativeAdded(id) {
   return state?.added.find(a => a.id === id && a.slide === state.order[index] && ["text", "image", "shape", "group", "table", "chart"].includes(a.kind));
@@ -375,14 +383,14 @@ function visualProperties() {
     $(panel).querySelectorAll("input,select,button").forEach(control => { control.disabled = disabled; });
   if (image) {
     const value = globalThis.SDObjects.normalizeImage(state.patches[s.id]?.image || s.image || native.image);
-    $("imageModeValue").value = value.mode;
+    propertyValue("imageModeValue", value.mode);
     for (const side of ["Left", "Right", "Top", "Bottom"])
-      $("crop" + side + "Value").value = Math.round(value.crop[side.toLowerCase()] * 100000) / 1000;
+      propertyValue("crop" + side + "Value", Math.round(value.crop[side.toLowerCase()] * 100000) / 1000);
   }
   if (shape) {
     const value = globalThis.SDObjects.normalizeShape(state.patches[s.id]?.shape || s.shape || native.shape, state.patches[s.id]?.fill || native.fill);
-    for (const [id, key] of [["shapeTypeValue", "type"], ["shapeStrokeValue", "stroke"], ["shapeStrokeWidthValue", "strokeWidth"], ["shapeDashValue", "dash"]]) $(id).value = value[key];
-    $("shapeFillValue").value = value.fill === "none" ? "#087e77" : value.fill;
+    for (const [id, key] of [["shapeTypeValue", "type"], ["shapeStrokeValue", "stroke"], ["shapeStrokeWidthValue", "strokeWidth"], ["shapeDashValue", "dash"]]) propertyValue(id, value[key]);
+    propertyValue("shapeFillValue", value.fill === "none" ? "#087e77" : value.fill);
     $("shapeNoFillValue").checked = value.fill === "none";
     const line = ["line", "arrow"].includes(value.type);
     $("shapeFillValue").disabled = disabled || line || value.fill === "none";
@@ -435,7 +443,7 @@ function textProperties() {
     ["lineHeightValue", style.lineHeight ?? 1.2], ["spaceAfterValue", style.spaceAfter ?? 0],
     ["listStyleValue", style.list ?? "none"], ["verticalAlignValue", box.vertical ?? "top"],
     ["textOverflowValue", box.overflow ?? "visible"], ["textAutoFitValue", box.autoFit ?? "none"],
-  ]) $(id).value = value;
+  ]) propertyValue(id, value);
   for (const [id, key] of [["boldTextBtn", "bold"], ["italicTextBtn", "italic"], ["underlineTextBtn", "underline"]])
     $(id).setAttribute("aria-pressed", style[key] === null ? "mixed" : String(style[key] === true));
   const indent = style.indent ?? 0;
@@ -490,6 +498,7 @@ const arrangementCommands = {
   hideObjectsBtn: "hide", lockObjectsBtn: "lock",
 };
 function arrangementTools() {
+  window.SDLinkUI?.update();
   const count = selectedElements.length, unavailable = !frameReady || objectBusy;
   const editable = count > 0 && !selectedElements.some(item => objectLocked(item.id));
   const precise = editable && !selectedElements.some(item => item.precisionReason);

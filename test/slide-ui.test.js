@@ -56,11 +56,14 @@ test("slide multi-selection moves, duplicates and deletes a stable block and pre
 }));
 
 test("deleting layout placeholders detaches roles and reapplying creates a visible replacement", () => fixture(async ({ p, saved, ready }) => {
+  await p.locator("#ribbon-slide-tab").click();
   await p.locator("#layoutBtn").click();
   await p.locator("#applySlideLayoutBtn").click();
   let s = await saved(); await ready();
   const original = s.slideLayouts.s0.placeholders.title;
   await p.frameLocator("#deckFrame").locator(`[data-sd-id="${original}"]`).click();
+  await p.locator("#ribbon-format-tab").click();
+  await p.locator("#objectSettingsBtn").click();
   await p.locator("#removeElementBtn").click();
   await p.waitForFunction(id => state.patches[id]?.hidden, original);
   s = await saved();
@@ -74,6 +77,7 @@ test("deleting layout placeholders detaches roles and reapplying creates a visib
   await p.waitForFunction(id => state.patches[id]?.hidden, original);
   s = await saved();
   assert.equal(s.slideLayouts.s0.placeholders.title, undefined);
+  await p.locator("#ribbon-slide-tab").click();
   await p.locator("#layoutBtn").click();
   await p.locator("#applySlideLayoutBtn").click();
   s = await saved(); await ready();
@@ -111,6 +115,7 @@ test("notes input survives immediate navigation, undo and reload without switchi
 }));
 
 test("layouts reset positions but keep text, themes preserve individual formatting and cloned bindings", () => fixture(async ({ p, saved, ready }) => {
+  await p.locator("#ribbon-slide-tab").click();
   await p.locator("#layoutBtn").click();
   await p.locator("#slideLayoutType").selectOption("title-body");
   await p.locator("#applySlideLayoutBtn").click();
@@ -118,12 +123,14 @@ test("layouts reset positions but keep text, themes preserve individual formatti
   const titleId = s.slideLayouts.s0.placeholders.title;
   const initial = s.added.find(a => a.id === titleId);
   // Use the existing JSON UI to make a realistic external edit with individual formatting.
+  await p.locator("#ribbon-file-tab").click();
   await p.locator("#jsonBtn").click();
   const next = structuredClone(s);
   next.patches[titleId] = { x: 600, richText: { paragraphs: [{ runs: [{ text: "유지할 제목", color: "#aabbcc", fontTheme: "heading" }] }] } };
   await p.locator("#jsonState").fill(JSON.stringify(next));
   await p.locator("#jsonApplyBtn").click();
   await saved(); await ready();
+  await p.locator("#ribbon-slide-tab").click();
   await p.locator("#themeBtn").click();
   await p.locator("#themePreset").selectOption("dark");
   await p.locator("#applyThemeBtn").click();
@@ -131,6 +138,7 @@ test("layouts reset positions but keep text, themes preserve individual formatti
   assert.equal(s.patches[titleId].richText.paragraphs[0].runs[0].color, "#aabbcc");
   const title = p.frameLocator("#deckFrame").locator(`[data-sd-id="${titleId}"]`);
   assert.equal(await title.locator("[data-sd-run]").first().evaluate(e => getComputedStyle(e).color), "rgb(170, 187, 204)");
+  await p.locator("#ribbon-slide-tab").click();
   await p.locator("#layoutBtn").click();
   await p.locator("#resetSlideLayoutBtn").click();
   s = await saved(); await ready();
@@ -166,6 +174,7 @@ test("long imported notes stay readable and intact when a slide is duplicated an
   assert.equal(Object.hasOwn(s.notes, copy), false);
   assert.equal((await p.locator("#notesValue").inputValue()).length, 20001);
   const saving = p.waitForResponse(r => r.url().endsWith("/save") && r.request().method() === "POST");
+  await p.locator("#ribbon-slide-tab").click();
   await p.locator("#backgroundValue").uncheck(); await saving; await saved();
   await p.reload(); await ready();
   const result = await app.store.get(d.id);

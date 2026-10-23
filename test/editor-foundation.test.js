@@ -174,6 +174,7 @@ test("undo immediately after text editing restores the previous content", () => 
 test("opening JSON settles direct text edits before taking the snapshot", () => fixture(async ({ page, frame }) => {
   await element(frame).dblclick();
   await element(frame).fill("JSON에도 보존할 내용");
+  await page.locator("#ribbon-file-tab").click();
   await page.locator("#jsonBtn").click();
   const field = page.locator("#jsonState");
   await field.waitFor();

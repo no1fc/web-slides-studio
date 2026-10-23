@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>SDLAB Slides · 발표 자료실</title>
     <link rel="stylesheet" href="/style.css" />
+    <link rel="stylesheet" href="/data-grid.css" />
     <script defer src="/jszip.min.js"></script>
     <script defer src="/text-model.js"></script>
     <script defer src="/object-model.js"></script>
@@ -14,6 +15,8 @@
     <script defer src="/authoring-ui.js"></script>
     <script defer src="/slide-ui.js"></script>
     <script defer src="/data-ui.js"></script>
+    <script defer src="/ribbon-ui.js"></script>
+    <script defer src="/link-ui.js"></script>
   </head>
   <body>
     <div id="toast" role="status" hidden></div>
@@ -30,6 +33,7 @@
             required /></label
         ><button class="primary" type="submit">로그인</button>
         <p id="loginError" role="alert"></p>
+        <a class="help-link" href="/help.html" target="_blank" rel="noopener">사용 설명서 · 지원 파일 형식 ↗</a>
       </form>
     </section>
     <div id="shell" hidden>
@@ -38,6 +42,7 @@
           SDLAB <span>Slides</span>
         </button>
         <div class="top-caption">생각을 담고, 바로 발표하세요.</div>
+        <a class="help-link" href="/help.html" target="_blank" rel="noopener">사용 설명서 ↗</a>
         <span id="localBadge" class="badge">개인 자료실</span
         ><button id="passwordBtn" class="quiet">비밀번호 변경</button
         ><button id="logoutBtn" class="quiet">로그아웃</button>
@@ -63,7 +68,8 @@
             </div>
             <div class="actions">
               <button id="newBtn">빈 자료 만들기</button
-              ><button id="uploadBtn" class="primary">＋ 자료 올리기</button>
+              ><button id="pptxImportBtn">PPTX 가져오기</button
+              ><button id="uploadBtn" class="primary">＋ HTML ZIP 올리기</button>
             </div>
           </div>
           <div class="library-tools">
@@ -86,13 +92,13 @@
             </p>
             <div class="actions">
               <button id="emptyUpload" class="primary">ZIP 파일 올리기</button
-              ><button id="folderBtn">폴더 선택</button><button id="pptxImportBtn">PPTX 가져오기</button>
+              ><button id="folderBtn">폴더 선택</button>
             </div>
-            <small>ZIP 최대 40MB · 압축 해제 64MB · 300개 파일</small>
+            <small>HTML ZIP 최대 40 MiB · 압축 해제 64 MiB · 300개 파일 · 80장</small>
           </div>
           <div class="import-note">
-            기존 PDF·PPTX 파일은 필요하지 않습니다. 저장한 웹 원본에서 다시 만들
-            수 있어요.
+            <span>가져오기: HTML ZIP·폴더 또는 16:9 PPTX · PDF·PPT·DOCX·HWP는 지원하지 않습니다.
+              <a class="help-link" href="/help.html#formats" target="_blank" rel="noopener">파일 조건 확인 ↗</a></span>
             <button id="folderUploadBtn" class="text-button">
               폴더로 올리기
             </button>
@@ -120,6 +126,23 @@
           ><button id="previewBtn">▷ 발표</button
           ><button id="shareBtn">공유</button
           ><button id="exportBtn" class="primary">다운로드 ↓</button>
+        </div>
+        <div id="editorRibbon" class="editor-ribbon" aria-label="편집 도구">
+          <div class="ribbon-tabs">
+            <div class="ribbon-tab-list" role="tablist" aria-label="편집 도구 탭">
+            <button id="ribbon-insert-tab" role="tab" aria-controls="ribbon-insert" aria-selected="false" tabindex="-1">삽입</button>
+            <button id="ribbon-format-tab" role="tab" aria-controls="ribbon-format" aria-selected="true">서식</button>
+            <button id="ribbon-arrange-tab" role="tab" aria-controls="ribbon-arrange" aria-selected="false" tabindex="-1">배치</button>
+            <button id="ribbon-slide-tab" role="tab" aria-controls="ribbon-slide" aria-selected="false" tabindex="-1">슬라이드</button>
+            <button id="ribbon-file-tab" role="tab" aria-controls="ribbon-file" aria-selected="false" tabindex="-1">파일</button>
+            </div>
+            <span class="ribbon-hint">도구를 고른 뒤 슬라이드에서 바로 편집하세요.</span>
+          </div>
+          <div id="ribbon-insert" class="ribbon-panel" role="tabpanel" aria-labelledby="ribbon-insert-tab" hidden><button id="linkBtn" disabled>링크</button></div>
+          <div id="ribbon-format" class="ribbon-panel" role="tabpanel" aria-labelledby="ribbon-format-tab"></div>
+          <div id="ribbon-arrange" class="ribbon-panel" role="tabpanel" aria-labelledby="ribbon-arrange-tab" hidden></div>
+          <div id="ribbon-slide" class="ribbon-panel" role="tabpanel" aria-labelledby="ribbon-slide-tab" hidden></div>
+          <div id="ribbon-file" class="ribbon-panel" role="tabpanel" aria-labelledby="ribbon-file-tab" hidden></div>
         </div>
         <div class="mobile-note">
           직접 배치 편집은 넓은 PC 화면에서 이용해 주세요. 발표와 다운로드는
@@ -177,7 +200,7 @@
           </main>
           <aside class="inspector">
             <div class="inspector-tabs">
-              <strong>편집</strong><span>선택한 요소</span>
+              <strong>선택과 레이어</strong>
             </div>
             <div class="add-tools">
               <button id="addTextBtn">T 글</button

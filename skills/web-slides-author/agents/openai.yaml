@@ -1,0 +1,4 @@
+interface:
+  display_name: "Web Slides Author"
+  short_description: "Create editable web slides and verify Studio imports"
+  default_prompt: "Use $web-slides-author to create an editable HTML presentation for Web Slides Studio and verify its imported result."

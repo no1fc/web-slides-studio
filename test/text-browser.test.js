@@ -26,7 +26,19 @@ async function fixture(fn) {
   } finally { await browser?.close(); await app.close(); await rm(root, { recursive: true, force: true }); }
 }
 async function saved(page) { await page.waitForFunction(() => document.querySelector("#saveStatus").textContent.startsWith("저장됨")); }
-async function change(page, id, value) { await page.locator("#" + id).fill(value); await page.locator("#" + id).dispatchEvent("change"); }
+async function setting(page, id, action) {
+  const control = page.locator("#" + id);
+  const dialogId = await control.evaluate(el => el.closest("dialog")?.id);
+  if (dialogId) await page.locator("#" + dialogId + "Btn").click();
+  const collapsed = control.locator("xpath=ancestor::details[not(@open)]");
+  if (await collapsed.count()) await collapsed.locator("summary").click();
+  await action(control);
+  await page.waitForFunction(() => !document.querySelector("#saveStatus").textContent.includes("적용 중"));
+  if (dialogId) await page.locator("#" + dialogId + " .dialog-head button").click();
+}
+async function change(page, id, value) {
+  await setting(page, id, async control => { await control.fill(value); await control.dispatchEvent("change"); });
+}
 async function selectRange(text, start, end) {
   await text.evaluate((el, { start, end }) => {
     const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT), nodes = []; let pos = 0;
@@ -40,9 +52,9 @@ async function selectRange(text, start, end) {
 test("whole text formatting and paragraph controls persist and undo as one command", () => fixture(async ({ app, deck, page, text }) => {
   await text.click(); await page.locator("#boldTextBtn").click();
   await page.waitForFunction(() => document.querySelector("#boldTextBtn").getAttribute("aria-pressed") === "true");
-  await page.locator("#textAlignValue").selectOption("center");
-  await page.locator("#listStyleValue").selectOption("bullet");
-  await page.locator("#indentTextBtn").click();
+  await setting(page, "textAlignValue", control => control.selectOption("center"));
+  await setting(page, "listStyleValue", control => control.selectOption("bullet"));
+  await setting(page, "indentTextBtn", control => control.click());
   await change(page, "lineHeightValue", "1.8");
   await saved(page); await page.reload(); await text.waitFor();
   const rich = (await app.store.get(deck.id)).state.patches["a-text"].richText;
@@ -86,13 +98,12 @@ test("IME composition finishes before toolbar formatting and keeps the final Kor
 test("autofit shrinks display without rewriting saved font sizes and vertical alignment stays inside the box", () => fixture(async ({ app, deck, page, text }) => {
   await text.click(); await change(page, "textValue", "긴 문장을 여러 번 적어 상자 안의 크기를 확인합니다. ".repeat(5));
   await change(page, "wValue", "400"); await change(page, "hValue", "180");
-  await page.locator("#textTools summary").filter({ hasText: "텍스트 상자" }).click();
-  await page.locator("#textAutoFitValue").selectOption("shrink"); await saved(page);
+  await setting(page, "textAutoFitValue", control => control.selectOption("shrink")); await saved(page);
   await text.evaluate(el => new Promise(resolve => requestAnimationFrame(resolve)));
   assert.ok(await text.evaluate(el => Number(el.dataset.sdFontScale) < 1));
   assert.equal((await app.store.get(deck.id)).state.patches["a-text"].richText.paragraphs[0].runs[0].fontSize, 48);
   await change(page, "textValue", "짧은 글");
-  await page.locator("#verticalAlignValue").selectOption("bottom"); await saved(page);
+  await setting(page, "verticalAlignValue", control => control.selectOption("bottom")); await saved(page);
   const space = await text.evaluate(el => { const a = el.getBoundingClientRect(), b = el.querySelector("[data-sd-text-content]").getBoundingClientRect(); return { top: b.top - a.top, bottom: a.bottom - b.bottom }; });
   assert.ok(space.top > 10); assert.ok(Math.abs(space.bottom) < 2);
   await page.reload(); await text.waitFor(); assert.equal(await text.evaluate(el => Number(el.dataset.sdFontScale)), 1);
@@ -129,7 +140,7 @@ test("a caret in an empty paragraph edits and formats that paragraph only", () =
   await text.dblclick();
   await text.evaluate(el => el.ownerDocument.defaultView.SDTextEditor.restore(el, { start: 3, end: 3 }));
   await page.keyboard.insertText("둘째");
-  await page.locator("#textAlignValue").selectOption("right"); await saved(page);
+  await setting(page, "textAlignValue", control => control.selectOption("right")); await saved(page);
   const p = (await app.store.get(deck.id)).state.patches["a-text"];
   assert.equal(p.text, "첫째\n둘째\n셋째");
   assert.deepEqual(p.richText.paragraphs.map(p => p.align), ["left", "right", "left"]);
@@ -148,8 +159,7 @@ test("format buttons reflect and toggle a range that starts exactly at a run bou
 test("pasting into an autofit box preserves logical font sizes", () => fixture(async ({ app, deck, page, text }) => {
   await text.click(); await change(page, "textValue", "자동 축소 텍스트 ".repeat(20)); await saved(page);
   await change(page, "wValue", "400"); await change(page, "hValue", "180");
-  await page.locator("#textTools summary").filter({ hasText: "텍스트 상자" }).click();
-  await page.locator("#textAutoFitValue").selectOption("shrink"); await saved(page);
+  await setting(page, "textAutoFitValue", control => control.selectOption("shrink")); await saved(page);
   assert.ok(Number(await text.getAttribute("data-sd-font-scale")) < 1);
   await text.dblclick(); await page.keyboard.press("Control+End");
   await text.evaluate(el => {
@@ -176,7 +186,7 @@ test("converting original nested text preserves its propagated underline", () =>
 test("Shift+Enter creates a soft line break inside the current paragraph", () => fixture(async ({ app, deck, page, text }) => {
   await text.dblclick(); await page.keyboard.press("Control+a"); await page.keyboard.insertText("첫 줄");
   await page.keyboard.press("Shift+Enter"); await page.keyboard.insertText("같은 문단");
-  await page.locator("#listStyleValue").selectOption("number"); await saved(page);
+  await setting(page, "listStyleValue", control => control.selectOption("number")); await saved(page);
   const p = (await app.store.get(deck.id)).state.patches["a-text"];
   assert.equal(p.text, "첫 줄\n같은 문단");
   assert.equal(p.richText.paragraphs.length, 1);

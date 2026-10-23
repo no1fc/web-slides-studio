@@ -176,6 +176,7 @@ label select {
 }
 .library-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 24px;
@@ -780,6 +781,7 @@ dialog::backdrop {
   }
   .library-head .actions {
     margin-top: 22px;
+    flex-wrap: wrap;
   }
   .library-tools {
     margin-top: 25px;
@@ -909,3 +911,142 @@ dialog::backdrop {
     flex-direction: column;
   }
 }
+
+/* Keep help separate from the editor so reading never interrupts a save. */
+.help-link { color: #086d67; font-size: 13px; font-weight: 600; text-underline-offset: 4px; }
+a:focus-visible, summary:focus-visible { outline: 3px solid #087e77; outline-offset: 4px; }
+.topbar > .help-link { flex-shrink: 0; }
+.help-page { line-height: 1.75; }
+.help-page a { color: #086d67; text-underline-offset: 4px; }
+.help-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; padding: 24px max(20px, calc((100% - 960px) / 2)); border-bottom: 1px solid var(--border); background: white; }
+.help-header .wordmark { text-decoration: none; }
+.help-main { max-width: 960px; margin: 0 auto; padding: 52px 24px; overflow-wrap: anywhere; }
+.help-main h1 { font-size: clamp(28px, 4vw, 40px); line-height: 1.3; letter-spacing: -1.5px; margin: 12px 0 20px; }
+.help-intro { max-width: 700px; color: #526973; }
+.help-nav { display: flex; gap: 12px 24px; flex-wrap: wrap; padding: 24px 0; }
+.help-section { scroll-margin-top: 20px; margin-top: 36px; padding-top: 20px; border-top: 1px solid var(--border); }
+.help-section h2 { font-size: 23px; letter-spacing: -.5px; }
+.help-steps { padding-left: 24px; }
+.help-steps li { padding-left: 8px; margin: 18px 0; }
+.help-steps strong { display: block; }
+.help-table-wrap { overflow-x: auto; }
+.help-table { border-collapse: collapse; width: 100%; background: white; font-size: 14px; }
+.help-table caption { text-align: left; padding: 12px 0; font-weight: 600; }
+.help-table th, .help-table td { border: 1px solid var(--border); padding: 14px; text-align: left; vertical-align: top; }
+.help-table thead { background: #edf5f3; }
+.help-note { padding: 16px; background: #edf5f3; border-left: 3px solid var(--accent); }
+.help-section details { padding: 18px 0; border-bottom: 1px solid var(--border); }
+.help-section summary { cursor: pointer; font-weight: 650; }
+.help-section pre { overflow-x: auto; background: #edf2f3; padding: 20px; border-radius: 8px; font-size: 14px; }
+.help-exports { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.help-exports > div { background: white; border: 1px solid var(--border); border-radius: 8px; padding: 20px; }
+.help-exports dt { font-weight: 700; }
+.help-exports dd { margin: 8px 0 0; }
+.help-footer { margin-top: 48px; color: #526973; font-size: 13px; }
+.help-skip { position: absolute; left: 16px; top: -80px; background: white; padding: 8px 16px; z-index: 10; }
+.help-skip:focus { top: 8px; }
+@media (max-width: 700px) {
+  .topbar { height: auto; min-height: 70px; flex-wrap: wrap; gap: 12px; padding: 16px; }
+  .help-main { padding: 32px 16px; }
+  .help-exports { grid-template-columns: 1fr; }
+  .help-table th, .help-table td { padding: 8px; }
+}
+
+/* Desktop ribbon keeps editing tools above the slide and layers in a short rail. */
+.editor-toolbar { min-height: 54px; gap: 6px; padding: 7px 14px; }
+.editor-toolbar button { padding: 7px 10px; font-size: 12px; }
+#deckTitle { width: min(24vw, 300px); min-width: 100px; }
+.editor-toolbar .object-actions { display: flex; border-left: 1px solid var(--border); padding-left: 9px; }
+.editor-ribbon { background: #fff; border-bottom: 1px solid var(--border); }
+.ribbon-tabs { display: flex; align-items: center; gap: 4px; padding: 0 14px; min-height: 41px; border-bottom: 1px solid #e7eeee; }
+.ribbon-tab-list > [role="tab"] { border: 0; border-bottom: 3px solid transparent; border-radius: 0; padding: 10px 17px 8px; background: transparent; }
+.ribbon-tab-list > [aria-selected="true"] { color: #096d62; border-bottom-color: #148b7c; font-weight: 750; }
+.ribbon-tab-list { display: flex; align-items: center; gap: 4px; }
+.ribbon-hint { color: var(--muted); font-size: 11px; margin-left: 12px; }
+.ribbon-tabs .add-tools { margin-left: auto; padding: 0; gap: 4px; }
+.ribbon-tabs .add-tools button { padding: 6px 9px; }
+.ribbon-panel { min-height: 130px; padding: 10px 16px; display: flex; align-items: center; gap: 20px; }
+.ribbon-panel button { padding: 7px 9px; font-size: 11px; }
+.ribbon-group { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+#ribbon-format { align-items: stretch; }
+#properties { display: flex; width: 100%; align-items: stretch; gap: 16px; }
+#properties > .text-tools { flex: 1; min-width: 330px; max-width: 560px; display: grid; grid-template-columns: 1.5fr 1fr; gap: 7px 12px; margin: 0; padding: 0 16px 0 0; border: 0; border-right: 1px solid var(--border); }
+#properties > .text-tools > #textRangeLabel { grid-column: 1 / -1; margin: 0; line-height: 1.2; }
+#properties > .text-tools > .prop-grid { grid-template-columns: 1fr 60px; gap: 8px; margin: 0; }
+#properties > .text-tools > label { margin: 0; }
+#properties > .text-tools > label input { width: 100%; }
+#properties > .text-tools > .text-emphasis { align-self: end; }
+#properties > .text-tools > #paragraphSettingsBtn { align-self: end; }
+.ribbon-panel label { font-size: 10px; color: #526973; }
+.ribbon-panel input:not([type="checkbox"]), .ribbon-panel select { padding: 5px 7px; font-size: 12px; height: 29px; margin-top: 3px; }
+.ribbon-dimensions { display: block; flex: 0 0 345px; padding-right: 16px; border-right: 1px solid var(--border); }
+.ribbon-geometry { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; margin: 0; }
+.ribbon-geometry input { width: 100%; min-width: 0; }
+.ribbon-dimensions .switch-row { margin: 12px 0 0; justify-content: flex-start; gap: 12px; }
+.ribbon-object-actions { flex: 0 1 250px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-content: start; align-items: stretch; gap: 7px; }
+.ribbon-object-actions > button { width: 100%; white-space: normal; }
+.ribbon-panel .arrangement-panel { flex: 1; display: flex; align-items: center; gap: 20px; border: 0; padding: 0; }
+.ribbon-panel .arrangement-panel > .panel-heading { display: none; }
+.ribbon-panel .arrangement-panel > .object-state-actions { margin: 0; grid-template-columns: 1fr; }
+.ribbon-panel .arrangement-tools { margin: 0; display: grid; grid-template-columns: 270px 170px; gap: 6px 12px; }
+.ribbon-panel .arrangement-tools > summary { display: none; }
+.ribbon-panel .arrangement-tools > .tool-help { grid-column: 1 / -1; margin: 0; }
+.ribbon-panel .distribution-grid { margin: 0; grid-template-columns: 1fr; }
+.ribbon-panel .layer-order-actions { grid-template-columns: repeat(2, 1fr); }
+#ribbon-slide > .ribbon-group { max-width: 300px; }
+.ribbon-panel .background-panel { display: grid; grid-template-columns: 160px 220px; gap: 4px 16px; margin: 0; padding: 0 0 0 24px; border: 0; border-left: 1px solid var(--border); }
+.ribbon-panel .background-panel h3 { grid-column: 1 / -1; margin: 0; }
+.ribbon-panel .background-panel .switch-row { margin: 5px 0; }
+.ribbon-panel .background-panel p { grid-column: 1 / -1; margin: 0; }
+.editor-body { height: calc(100dvh - 70px - var(--editor-toolbar-height, 54px) - var(--editor-ribbon-height, 172px)); min-height: 0; grid-template-columns: 170px minmax(0, 1fr) 230px; }
+.inspector { display: flex; flex-direction: column; min-height: 0; overflow: hidden; padding: 0 12px 12px; }
+.inspector-tabs { flex: 0 0 45px; justify-content: space-between; gap: 6px; }
+.inspector .layers-panel { display: flex; flex-direction: column; min-height: 0; border: 0; padding-bottom: 0; flex: 1; }
+.inspector .layers-panel > .tool-help { display: none; }
+#layerList { max-height: none; min-height: 0; overflow-y: auto; }
+.canvas-main { padding: 0 18px; }
+.canvas-tools, .canvas-footer { height: 38px; }
+.ribbon-settings { width: 640px; max-height: min(720px, 90dvh); padding: 22px; }
+.ribbon-settings .dialog-head { margin-bottom: 16px; }
+.ribbon-settings .dialog-head button { width: auto; font-size: 12px; }
+.ribbon-settings-body { display: grid; gap: 12px; }
+.ribbon-settings-body > label { display: block; font-size: 12px; }
+.ribbon-settings-body input:not([type="checkbox"]), .ribbon-settings-body select, .ribbon-settings-body textarea { width: 100%; height: auto; padding: 8px; font-size: 13px; }
+.ribbon-settings-body textarea { min-height: 180px; resize: vertical; }
+.ribbon-settings-body .text-section { margin: 0; padding: 10px 0; }
+.ribbon-settings-body .object-visual-tools { margin: 0; padding: 0; border: 0; }
+.ribbon-settings-body #textField { display: block; }
+@media (max-width: 1350px) {
+  .ribbon-hint { display: none; }
+  .ribbon-dimensions { flex-basis: 300px; }
+  .ribbon-object-actions { flex-basis: 220px; }
+}
+@media (max-width: 1100px) {
+  .ribbon-tabs { flex-wrap: wrap; }
+  .ribbon-tabs .add-tools { margin-left: 12px; }
+  .ribbon-panel { min-height: 130px; flex-wrap: wrap; }
+  #properties { flex-wrap: wrap; }
+  #properties > .text-tools { flex-basis: 50%; }
+  .ribbon-object-actions { display: flex; flex-basis: 100%; }
+  .ribbon-object-actions > button { width: auto; }
+  .ribbon-panel .arrangement-panel { flex-wrap: wrap; }
+  .editor-body { grid-template-columns: 145px minmax(0, 1fr) 195px; }
+}
+@media (max-width: 760px) {
+  .editor-toolbar { flex-wrap: wrap; }
+  .ribbon-tabs { padding: 0 8px; }
+  .ribbon-tab-list > [role="tab"] { padding: 9px 11px; }
+  .ribbon-tabs .add-tools { width: 100%; flex-wrap: wrap; margin: 4px 0 8px; }
+  #properties > .text-tools { min-width: 0; flex-basis: 100%; border: 0; padding: 0; }
+  .ribbon-dimensions { flex: 1 1 100%; padding: 0; border: 0; }
+  .ribbon-panel .arrangement-tools { grid-template-columns: 1fr; }
+  .ribbon-panel .background-panel { padding: 0; border: 0; grid-template-columns: 1fr; }
+  .editor-body { display: flex; height: auto; }
+  .inspector { display: none; }
+}
+#properties > .text-tools > .text-overflow-note { grid-column: 1 / -1; margin: 0; padding: 4px 6px; font-size: 10px; }
+
+#ribbon-insert { align-content: center; flex-wrap: wrap; gap: 6px; }
+#ribbon-insert .add-tools { width: 100%; padding: 0; gap: 10px; flex-wrap: wrap; }
+#ribbon-insert .add-tools button { min-width: 85px; padding: 13px 20px; font-size: 13px; }
+#ribbon-insert > .tool-help { margin: 5px 0 0; }
