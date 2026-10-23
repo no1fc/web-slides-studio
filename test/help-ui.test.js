@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { chromium } from "playwright";
 import { startStudio } from "../src/server.js";
+import { openRibbonTab } from "./editor-ui-helpers.js";
 
 test("public help explains import limits and import stays available in a populated library", async () => {
   const app = await startStudio({ root: await mkdtemp(join(tmpdir(), "studio-help-")), port: 0, contentPort: 0, password: "test-help-password" });
@@ -33,7 +34,14 @@ test("public help explains import limits and import stays available in a populat
     await page.waitForSelector("#library:not([hidden])");
     await page.locator("#newBtn").click();
     await page.waitForSelector("#editor:not([hidden])");
-    assert.equal(await page.locator('.topbar a[href="/help.html"]').isVisible(), true);
+    await openRibbonTab(page, "file");
+    const editorHelpOpened = page.waitForEvent("popup");
+    await page.locator('#editorHelpLink').click();
+    const editorHelp = await editorHelpOpened;
+    await editorHelp.waitForURL(`${app.origin}/help.html`);
+    assert.equal(await editorHelp.evaluate(() => window.opener), null);
+    assert.equal(await editorHelp.locator('#formats').isVisible(), true);
+    await editorHelp.close();
     await page.locator("#libraryBtn").click();
     await page.waitForSelector(".deck-card");
     assert.equal(await page.locator("#pptxImportBtn").isVisible(), true);

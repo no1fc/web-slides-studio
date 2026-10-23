@@ -10,6 +10,7 @@
   for (const button of [search, overview, collapse]) button.type = 'button';
   controls.append(search, overview, collapse); tabs.append(controls);
   const setCollapsed = value => {
+    if (ribbon.hasAttribute('popover')) return;
     ribbon.classList.toggle('ribbon-collapsed', value);
     collapse.textContent = value ? '도구 펼치기' : '도구 접기';
     collapse.setAttribute('aria-expanded', String(!value));

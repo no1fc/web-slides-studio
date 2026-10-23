@@ -1,3 +1,4 @@
+import { clickEditorTool, openRibbonTab } from './editor-ui-helpers.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
@@ -84,7 +85,7 @@ test('preflight finds actual layout, missing asset and invalid link issues witho
   await page.waitForFunction(()=>typeof frameReady!=='undefined'&&frameReady&&!transitionBusy);
   const before=await app.store.get(deck.id);
   await page.evaluate(()=>{window.checkedIssues=[];window.addEventListener('message',event=>{if(event.data?.type==='preflight-result')window.checkedIssues=event.data.issues;});});
-  await page.locator('#ribbon-present-tab').click(); await page.locator('#preflightBtn').click();
+  await openRibbonTab(page, 'present'); await clickEditorTool(page, 'preflightBtn');
   await page.waitForFunction(()=>checkedIssues.length>0);
   const issues=await page.evaluate(()=>checkedIssues);
   for(const text of ['이미지를 불러오지','글이 글상자','슬라이드 밖','내부 링크']) assert.ok(issues.some(issue=>issue.message.includes(text)),text);

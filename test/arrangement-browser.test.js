@@ -1,3 +1,4 @@
+import { clickEditorTool, openInspector, openRibbonTab, showEditorControl } from './editor-ui-helpers.js';
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -118,16 +119,17 @@ test("duplicated source text keeps formatting, new IDs and independence and can 
   assert.match(copy.html, /strong/); assert.ok(!copy.html.includes("data-sd-id"));
   const copied = item(frame, copy.id);
   assert.equal(await copied.evaluate(e => getComputedStyle(e).color), "rgb(10, 100, 90)");
+  await openInspector(page, "layers");
   await page.locator('[data-layer-id="e0"] [data-layer-action="select"]').click();
   await page.waitForFunction(() => document.querySelector('[data-layer-id="e0"] [data-layer-action="select"]').getAttribute("aria-pressed") === "true");
-  await page.locator("#ribbon-format-tab").click();
-  await page.locator("#textContentSettingsBtn").click();
+  await openRibbonTab(page, 'format');
+  await clickEditorTool(page, 'textContentSettingsBtn');
   await page.locator("#textValue").fill("원본만 변경"); await page.locator("#textValue").dispatchEvent("change");
   await page.locator("#textContentSettings").getByRole("button", {name:"닫기",exact:true}).click();
   assert.match(await copied.textContent(), /복제할/);
   await copied.click(); await page.keyboard.press("Control+c");
   await page.locator("#slideList .slide-item").nth(1).click();
-  await page.locator("#pasteObjectsBtn").click();
+  await clickEditorTool(page, 'pasteObjectsBtn');
   await frame.locator('[data-sd-slide="s1"] [data-sd-added="true"]').waitFor(); await saved(page);
   current = await app.store.get(deck.id);
   assert.equal(current.state.added.filter(a => a.kind === "html").length, 2);
@@ -138,8 +140,8 @@ test("layer ordering persists when a sibling is locked and does not unlock or mo
   await send(page, "layer-toggle", { id: "a-two", key: "locked" }); await waitChange(page, 1);
   await item(frame, "a-one").click();
   const response = page.waitForResponse(r => r.url().endsWith("/save") && r.request().method() === "POST");
-  await page.locator("#ribbon-arrange-tab").click();
-  await page.locator("#layerFrontBtn").click(); await waitChange(page, 2); await response;
+  await openRibbonTab(page, 'arrange');
+  await clickEditorTool(page, 'layerFrontBtn'); await waitChange(page, 2); await response;
   const current = await app.store.get(deck.id);
   assert.ok(current.state.patches["a-one"].z > current.state.patches["a-two"].z);
   assert.equal(current.state.patches["a-two"].locked, true);
@@ -167,15 +169,15 @@ test("group movement keeps document coordinates at 50, 100 and 200 percent zoom"
 
 test("alignment and vertical distribution measure the visible bounds of rotated objects", () => fixture(async ({ page, frame }) => {
   await item(frame, "a-three").click();
-  await page.locator("#rotateValue").fill("30"); await page.locator("#rotateValue").dispatchEvent("change");
+  await showEditorControl(page, 'rotateValue'); await page.locator("#rotateValue").fill("30"); await page.locator("#rotateValue").dispatchEvent("change");
   await send(page, "select-ids", { ids: ["a-one", "a-two", "a-three"] });
-  await page.locator("#ribbon-arrange-tab").click();
-  await page.locator("#alignRightBtn").click(); await waitChange(page, 1);
+  await openRibbonTab(page, 'arrange');
+  await clickEditorTool(page, 'alignRightBtn'); await waitChange(page, 1);
   const rectangles = async () => Promise.all(["a-one", "a-two", "a-three"].map(id => item(frame, id).evaluate(e => { const r = e.getBoundingClientRect(); return { right: r.right, top: r.top, bottom: r.bottom }; })));
   let rects = await rectangles(); near(rects[0].right, rects[1].right); near(rects[1].right, rects[2].right);
   const edges = [rects[0].top, rects[2].bottom];
-  await page.locator("#ribbon-arrange-tab").click();
-  await page.locator("#distributeYBtn").click(); await waitChange(page, 2);
+  await openRibbonTab(page, 'arrange');
+  await clickEditorTool(page, 'distributeYBtn'); await waitChange(page, 2);
   rects = await rectangles(); near(rects[0].top, edges[0]); near(rects[2].bottom, edges[1]);
   near(rects[1].top - rects[0].bottom, rects[2].top - rects[1].bottom);
 }));
@@ -191,8 +193,8 @@ test("a duplicated title retains editable font and color through reload and repe
   const emphasis = copy.locator("[data-sd-run]").filter({ hasText: "제목" });
   assert.equal(await emphasis.evaluate(e => getComputedStyle(e).fontSize), "64px");
   assert.equal(await emphasis.evaluate(e => getComputedStyle(e).color), "rgb(170, 34, 51)");
-  await page.locator("#ribbon-format-tab").click();
-  await page.locator("#textContentSettingsBtn").click();
+  await openRibbonTab(page, 'format');
+  await clickEditorTool(page, 'textContentSettingsBtn');
   await page.locator("#textValue").fill("새 제목"); await page.locator("#textValue").dispatchEvent("change");
   await page.locator("#textContentSettings").getByRole("button", {name:"닫기",exact:true}).click();
   assert.equal(await copy.evaluate(e => getComputedStyle(e).fontSize), "64px");
@@ -208,6 +210,7 @@ test("runtime navigation refreshes the layer inventory for the newly active slid
   const content = await (await page.$("#deckFrame")).contentFrame();
   await content.evaluate(() => window.__sd.go(1));
   await frame.locator('[data-sd-slide="s1"].active').waitFor();
+  await openInspector(page, 'layers');
   await page.locator('[data-layer-id="e1"]').waitFor();
   assert.equal(await page.locator('[data-layer-id="a-one"]').count(), 0);
 }));
@@ -215,10 +218,11 @@ test("runtime navigation refreshes the layer inventory for the newly active slid
 test("duplicating a rotated object with an off-center origin preserves its visual placement", () => fixture(async ({ page, frame }) => {
   const original = item(frame, "e0");
   await original.evaluate(e => { e.style.rotate = "30deg"; e.style.transformOrigin = "0 0"; });
+  await openInspector(page, "layers");
   await page.locator('[data-layer-id="e0"] [data-layer-action="select"]').click();
   await page.waitForFunction(() => document.querySelector('[data-layer-id="e0"] [data-layer-action="select"]').getAttribute("aria-pressed") === "true");
   const before = await original.boundingBox(), ss = await frame.locator(".slide.active").evaluate(e => e.getBoundingClientRect().width / 1920);
-  await page.locator("#duplicateObjectsBtn").click();
+  await clickEditorTool(page, 'duplicateObjectsBtn');
   const copied = frame.locator('[data-sd-added="true"]').nth(3); await copied.waitFor();
   const after = await copied.boundingBox();
   near((after.x - before.x) / ss, 24); near((after.y - before.y) / ss, 24);

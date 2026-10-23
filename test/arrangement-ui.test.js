@@ -1,3 +1,4 @@
+import { clickEditorTool, openInspector } from './editor-ui-helpers.js';
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -63,7 +64,7 @@ test("parent duplicates all snapshots independently and pastes across slides wit
   await page.waitForFunction(() => !document.querySelector("#pasteObjectsBtn").disabled);
   await page.locator("#slideList .slide-item").nth(1).click();
   await page.frameLocator("#deckFrame").locator('[data-sd-slide="s1"].active').waitFor();
-  saved = save(); await page.locator("#pasteObjectsBtn").click(); await saved;
+  saved = save(); await clickEditorTool(page, 'pasteObjectsBtn'); await saved;
   state = (await app.store.get(deck.id)).state;
   assert.equal(state.added.length, 4);
   assert.equal(state.added.filter(a => a.slide === "s1").length, 2);
@@ -127,6 +128,7 @@ test("batch validation failure rejects the whole change without an undo entry", 
 }));
 
 test("selecting through the layer panel hands keyboard movement to the frame", () => fixture(async ({ app, deck, page, save }) => {
+  await openInspector(page, "layers");
   await page.locator('#layerList [data-layer-id="e0"] [data-layer-action="select"]').click();
   await page.waitForFunction(() => document.querySelector("#selectionCount").textContent === "1개 선택");
   const saved = save();

@@ -1,3 +1,4 @@
+import { clickEditorTool } from './editor-ui-helpers.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
@@ -20,7 +21,7 @@ test('link dialog lists pages, validates URLs, saves, undoes and removes links',
     await ready();
     const id=deck.elements.find(e=>e.slide==='s0').id;
     const select=async()=>{await page.evaluate(id=>post('select-ids',{ids:[id]}),id);await page.waitForFunction(id=>selected?.id===id,id);};
-    const open=async()=>{await select();await page.locator('#linkBtn').click();};
+    const open=async()=>{await select();await clickEditorTool(page, 'linkBtn');};
     await open();
     await page.locator('#linkTypeValue').selectOption('slide');
     assert.match(await page.locator('#linkSlideValue').innerText(),/결과/);

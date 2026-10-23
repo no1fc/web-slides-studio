@@ -1,3 +1,4 @@
+import { openRibbonTab, showEditorControl } from './editor-ui-helpers.js';
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -146,7 +147,7 @@ test("group selection is atomic, scale stays uniform, cancellation restores chil
 
 test("parent toolbar grouping survives save reload scale rotate ungroup and undo without shifting children", () => fixture(async ({ app, deck, page, frame }) => {
   const arrange = async id => {
-    await page.locator("#ribbon-arrange-tab").click();
+    await openRibbonTab(page, 'arrange');
     await page.locator(id).click();
   };
   const commandAndSave = async action => {
@@ -161,7 +162,7 @@ test("parent toolbar grouping survives save reload scale rotate ungroup and undo
     return (await app.store.get(deck.id)).state;
   };
   const setNumber = async (id, value) => {
-    await page.locator("#ribbon-format-tab").click();
+    await showEditorControl(page, id.slice(1));
     await page.locator(id).fill(String(value));
     if (id === "#wValue") {
       const reports = await page.evaluate(() => objectMessages.filter(message => message.type === "select").length);

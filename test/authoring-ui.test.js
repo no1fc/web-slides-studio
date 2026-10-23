@@ -1,3 +1,4 @@
+import { clickEditorTool, openRibbonTab } from './editor-ui-helpers.js';
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp } from "node:fs/promises";
@@ -7,15 +8,15 @@ import { chromium } from "playwright";
 import { startStudio } from "../src/server.js";
 +
 test("code duplication preserves class selectors and CSS string literals", () => fixture(async (app, p, frame) => {
-  await p.locator("#ribbon-file-tab").click();
-  await p.locator("#ribbon-file-tab").click();
+  await openRibbonTab(p, 'file');
+  await openRibbonTab(p, 'file');
   await p.locator("#advancedTools").evaluate(e => e.open = true);
-  await p.locator("#codeBtn").click();
+  await clickEditorTool(p, 'codeBtn');
   await p.locator("#codeHtml").fill('<h1 data-sd-id="e0" class="e0">선택자 구분</h1>');
   await p.locator("#codeCss").fill('.e0{color:red} [data-sd-id="e0"]{font-size:64px} .e0::after{content:\'[data-sd-id="e0"]\'}');
   await p.locator("#codeApplyBtn").click();
   await p.locator("#dialog").waitFor({state:"hidden"});
-  await p.locator("#duplicateSlideBtn").click();
+  await clickEditorTool(p, 'duplicateSlideBtn');
   await p.waitForFunction(() => frameReady && !transitionBusy && document.querySelectorAll("#slideList .slide-item").length === 2);
   await frame().locator(".slide.active h1").waitFor();
   assert.equal(await frame().locator(".slide.active h1").evaluate(e=>getComputedStyle(e).color), "rgb(255, 0, 0)");
@@ -26,16 +27,16 @@ test("code duplication preserves class selectors and CSS string literals", () =>
 
 +
 test("switching masters can be cancelled without discarding unsaved code", () => fixture(async (app, p) => {
-  await p.locator("#ribbon-slide-tab").click();
-  await p.locator("#ribbon-file-tab").click();
+  await openRibbonTab(p, 'slide');
+  await openRibbonTab(p, 'file');
   await p.locator("#advancedTools").evaluate(e => e.open = true);
-  await p.locator("#masterBtn").click();
+  await clickEditorTool(p, 'masterBtn');
   await p.locator("#masterSaveBtn").click();
   await p.locator("#dialog").waitFor({state:"hidden"});
-  await p.locator("#ribbon-slide-tab").click();
-  await p.locator("#ribbon-file-tab").click();
+  await openRibbonTab(p, 'slide');
+  await openRibbonTab(p, 'file');
   await p.locator("#advancedTools").evaluate(e => e.open = true);
-  await p.locator("#masterBtn").click();
+  await clickEditorTool(p, 'masterBtn');
   await p.locator("#masterHtml").waitFor({state:"visible"});
   const selected = await p.locator("#masterSelect").inputValue();
   await p.locator("#masterHtml").fill("<p>작성 중인 마스터</p>");
@@ -48,18 +49,18 @@ test("switching masters can be cancelled without discarding unsaved code", () =>
 +
 test("failed source saves can be reopened and corrected without losing the draft", () => fixture(async (app, p) => {
   p.on("dialog", dialog => dialog.accept());
-  await p.locator("#ribbon-file-tab").click();
-  await p.locator("#ribbon-file-tab").click();
+  await openRibbonTab(p, 'file');
+  await openRibbonTab(p, 'file');
   await p.locator("#advancedTools").evaluate(e => e.open = true);
-  await p.locator("#codeBtn").click();
+  await clickEditorTool(p, 'codeBtn');
   await p.locator("#codeHtml").fill('<h1>보존할 제목</h1><img src="missing.png">');
   await p.locator("#codeApplyBtn").click();
   await p.waitForFunction(() => document.getElementById("codeError").textContent.length > 0);
   await p.locator("#closeDialog").click();
-  await p.locator("#ribbon-file-tab").click();
-  await p.locator("#ribbon-file-tab").click();
+  await openRibbonTab(p, 'file');
+  await openRibbonTab(p, 'file');
   await p.locator("#advancedTools").evaluate(e => e.open = true);
-  await p.locator("#codeBtn").click();
+  await clickEditorTool(p, 'codeBtn');
   await p.locator("#codeHtml").waitFor({state:"visible"});
   assert.match(await p.locator("#codeHtml").inputValue(), /missing.png/);
   await p.locator("#codeHtml").fill("<h1>보존할 제목</h1>");
@@ -69,15 +70,15 @@ test("failed source saves can be reopened and corrected without losing the draft
   assert.match((await current(app)).state.slideCode.s0.html, /보존할 제목/);
 }));
 test("duplicating a code slide remaps CSS references to editable element IDs", () => fixture(async (app, p, frame) => {
-  await p.locator("#ribbon-file-tab").click();
-  await p.locator("#ribbon-file-tab").click();
+  await openRibbonTab(p, 'file');
+  await openRibbonTab(p, 'file');
   await p.locator("#advancedTools").evaluate(e => e.open = true);
-  await p.locator("#codeBtn").click();
+  await clickEditorTool(p, 'codeBtn');
   await p.locator("#codeHtml").fill('<h1 data-sd-id="c-s0--e0">색상 유지</h1>');
   await p.locator("#codeCss").fill('[data-sd-id="c-s0--e0"]{color:rgb(255,0,0)}');
   await p.locator("#codeApplyBtn").click();
   await p.locator("#dialog").waitFor({state:"hidden"});
-  await p.locator("#duplicateSlideBtn").click();
+  await clickEditorTool(p, 'duplicateSlideBtn');
   await p.waitForFunction(() => frameReady && !transitionBusy && document.querySelectorAll("#slideList .slide-item").length === 2);
   await frame().locator(".slide.active h1").filter({hasText:"색상 유지"}).waitFor();
   assert.equal(await frame().locator(".slide.active h1").evaluate(e=>getComputedStyle(e).color), "rgb(255, 0, 0)");
@@ -103,10 +104,10 @@ async function current(app) {
   return app.store.get((await app.store.list())[0].id);
 }
 test("HTML/CSS and JSON editors validate drafts, persist changes, and support undo", () => fixture(async (app, p, frame) => {
-  await p.locator("#ribbon-file-tab").click();
-  await p.locator("#ribbon-file-tab").click();
+  await openRibbonTab(p, 'file');
+  await openRibbonTab(p, 'file');
   await p.locator("#advancedTools").evaluate(e => e.open = true);
-  await p.locator("#codeBtn").click();
+  await clickEditorTool(p, 'codeBtn');
   await p.locator("#codeHtml").fill('<h1 class="custom-title">코드 제목</h1>');
   await p.locator("#codeCss").fill(".custom-title {color:#ff0000;font-size:64px}");
   await p.locator("#codeApplyBtn").click();
@@ -118,8 +119,8 @@ test("HTML/CSS and JSON editors validate drafts, persist changes, and support un
   let d = await current(app);
   assert.match(d.state.slideCode.s0.html, /코드 제목/);
   const codeId = /data-sd-id="([^"]+)"/.exec(d.state.slideCode.s0.html)[1];
-  await p.locator("#ribbon-file-tab").click();
-  await p.locator("#ribbon-file-tab").click();
+  await openRibbonTab(p, 'file');
+  await openRibbonTab(p, 'file');
   await p.locator("#advancedTools").evaluate(e => e.open = true);
   await p.locator("#jsonBtn").click();
   const draft = JSON.parse(await p.locator("#jsonState").inputValue());
@@ -139,10 +140,10 @@ test("HTML/CSS and JSON editors validate drafts, persist changes, and support un
   await frame().locator(".slide.active h1").filter({ hasText: "JSON 수정" }).waitFor();
   d = await current(app);
   assert.equal(d.state.patches[codeId].x, 25);
-  await p.locator("#ribbon-file-tab").click();
-  await p.locator("#ribbon-file-tab").click();
+  await openRibbonTab(p, 'file');
+  await openRibbonTab(p, 'file');
   await p.locator("#advancedTools").evaluate(e => e.open = true);
-  await p.locator("#codeBtn").click();
+  await clickEditorTool(p, 'codeBtn');
   await p.locator("#codeHtml").fill("<script>alert(1)</script>");
   await p.locator("#codeApplyBtn").click();
   await p.waitForFunction(() => document.getElementById("codeError").textContent.length > 0);
@@ -150,19 +151,19 @@ test("HTML/CSS and JSON editors validate drafts, persist changes, and support un
   assert.equal((await current(app)).revision, d.revision);
 }));
 test("master templates propagate and survive code-slide duplication and undo", () => fixture(async (app, p, frame) => {
-  await p.locator("#ribbon-file-tab").click();
-  await p.locator("#ribbon-file-tab").click();
+  await openRibbonTab(p, 'file');
+  await openRibbonTab(p, 'file');
   await p.locator("#advancedTools").evaluate(e => e.open = true);
-  await p.locator("#codeBtn").click();
+  await clickEditorTool(p, 'codeBtn');
   await p.locator("#layoutPreset").selectOption("two-column");
   await p.locator("#loadLayoutBtn").click();
   await p.locator("#codeApplyBtn").click();
   await p.waitForSelector("#dialog", { state: "hidden" });
   await saved(p);
-  await p.locator("#ribbon-slide-tab").click();
-  await p.locator("#ribbon-file-tab").click();
+  await openRibbonTab(p, 'slide');
+  await openRibbonTab(p, 'file');
   await p.locator("#advancedTools").evaluate(e => e.open = true);
-  await p.locator("#masterBtn").click();
+  await clickEditorTool(p, 'masterBtn');
   await p.locator("#masterName").fill("공통 브랜드");
   await p.locator("#masterHtml").fill('<div class="brand">SDLAB</div>');
   await p.locator("#masterCss").fill(".brand {position:absolute;top:10px;right:20px;color:#123456}");
@@ -172,7 +173,7 @@ test("master templates propagate and survive code-slide duplication and undo", (
   let d = await current(app);
   const masterId = d.state.slideMasters.s0;
   assert.equal(d.state.masters[masterId].name, "공통 브랜드");
-  await p.locator("#duplicateSlideBtn").click();
+  await clickEditorTool(p, 'duplicateSlideBtn');
   await p.waitForFunction(() => frameReady && !transitionBusy && document.querySelectorAll("#slideList .slide-item").length === 2);
   await saved(p);
   d = await current(app);
@@ -180,10 +181,10 @@ test("master templates propagate and survive code-slide duplication and undo", (
   assert.equal(d.state.slideMasters[copied], masterId);
   assert.ok(d.state.slideCode[copied]);
   assert.match(d.state.slideCode[copied].html, new RegExp("c-" + copied + "--"));
-  await p.locator("#ribbon-slide-tab").click();
-  await p.locator("#ribbon-file-tab").click();
+  await openRibbonTab(p, 'slide');
+  await openRibbonTab(p, 'file');
   await p.locator("#advancedTools").evaluate(e => e.open = true);
-  await p.locator("#masterBtn").click();
+  await clickEditorTool(p, 'masterBtn');
   await p.locator("#masterHtml").fill('<div class="brand">공통 수정</div>');
   await p.locator("#masterSaveBtn").click();
   await p.waitForSelector("#dialog", { state: "hidden" });
@@ -210,8 +211,8 @@ test("a delayed save response never overwrites later edits", () => fixture(async
     await gate;
     await route.fulfill({ response });
   });
-  await p.locator("#ribbon-format-tab").click();
-  await p.locator("#textContentSettingsBtn").click();
+  await openRibbonTab(p, 'format');
+  await clickEditorTool(p, 'textContentSettingsBtn');
   await p.locator("#textValue").fill("먼저 저장");
   await p.locator("#textValue").dispatchEvent("change");
   await seen;
