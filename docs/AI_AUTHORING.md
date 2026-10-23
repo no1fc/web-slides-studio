@@ -65,6 +65,10 @@ node scripts/install-ai.mjs --client all \
 
 MCP 없이 쓰려면 저장소의 [skills/web-slides-author](../skills/web-slides-author/SKILL.md) 폴더 전체를 원하는 클라이언트의 위 스킬 경로에 복사하세요. 생성한 ZIP은 자료실의 **HTML ZIP 올리기**로 직접 가져옵니다.
 
+### Windows ZIP 가져오기 오류가 났을 때
+
+이전 버전의 `The ZIP path changed while being read` 오류는 Windows의 경로 메타데이터와 파일 핸들 메타데이터가 다르게 보고되는 경우 발생했습니다. 최신 버전은 같은 종류의 정보끼리 비교하며 경로·심볼릭 링크·파일 교체 검사를 유지합니다. 저장소를 업데이트한 뒤 `npm ci --prefix integrations/mcp --ignore-scripts`를 실행하고 **MCP 프로세스를 재시작**하세요. 클라이언트에서 재시작할 수 없으면 AI 앱을 완전히 종료했다가 다시 실행합니다. 실행 중인 MCP는 소스 업데이트만으로 바뀌지 않습니다. 재시도 전에 자료 목록을 확인해 이미 생성된 자료를 중복 가져오지 마세요.
+
 ### 연결 확인과 기존 자료 수정
 
 AI에 “Web Slides Studio 자료 목록을 읽어 주세요”라고 요청해 `slides_list_decks` 연결을 확인합니다. 기존 자료는 `slides_get_deck`로 현재 `revision`, `state`, 슬라이드 ID를 읽습니다. 한 장의 코드를 바꿀 때는 `slides_get_slide_source` 다음 `slides_update_slide`를 사용합니다. 전체 상태를 바꿀 때만 `slides_update_state`를 사용하고 다른 장·노트·마스터를 유지합니다.
