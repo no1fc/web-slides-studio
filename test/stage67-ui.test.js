@@ -59,8 +59,8 @@ test('PPTX import previews warnings without creating a deck and creates only aft
   const buffer=await ppt.write({outputType:'nodebuffer'}),before=(await app.store.list()).length;
   await page.locator('#libraryBtn').click();await page.waitForFunction(()=>deck===null);
   await page.locator('#pptxInput').setInputFiles({name:'editable.pptx',mimeType:'application/vnd.openxmlformats-officedocument.presentationml.presentation',buffer});
-  await page.locator('#confirmPptxImportBtn').waitFor();assert.equal((await app.store.list()).length,before);
-  await page.locator('#confirmPptxImportBtn').click();await page.waitForFunction(()=>!transitionBusy&&frameReady&&state.added.some(a=>a.text?.includes('Imported title')));
+  await page.locator('.upload-row[data-status=review]').waitFor();assert.equal((await app.store.list()).length,before);
+  await page.locator('.upload-row').getByRole('button',{name:'변환 결과 가져오기'}).click();await page.locator('.upload-row[data-status=done]').getByRole('button',{name:'자료 열기'}).click();await page.waitForFunction(()=>!transitionBusy&&frameReady&&state.added.some(a=>a.text?.includes('Imported title')));
   assert.equal((await app.store.list()).length,before+1);
   await page.locator('.slide-item').nth(1).click();await page.waitForFunction(()=>!transitionBusy&&index===1);
   const frame=page.frameLocator('#deckFrame');

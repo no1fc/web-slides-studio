@@ -175,6 +175,8 @@ test("opening JSON settles direct text edits before taking the snapshot", () => 
   await element(frame).dblclick();
   await element(frame).fill("JSON에도 보존할 내용");
   await page.locator("#ribbon-file-tab").click();
+  await page.locator("#ribbon-file-tab").click();
+  await page.locator("#advancedTools").evaluate(e => e.open = true);
   await page.locator("#jsonBtn").click();
   const field = page.locator("#jsonState");
   await field.waitFor();

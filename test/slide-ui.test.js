@@ -124,6 +124,8 @@ test("layouts reset positions but keep text, themes preserve individual formatti
   const initial = s.added.find(a => a.id === titleId);
   // Use the existing JSON UI to make a realistic external edit with individual formatting.
   await p.locator("#ribbon-file-tab").click();
+  await p.locator("#ribbon-file-tab").click();
+  await p.locator("#advancedTools").evaluate(e => e.open = true);
   await p.locator("#jsonBtn").click();
   const next = structuredClone(s);
   next.patches[titleId] = { x: 600, richText: { paragraphs: [{ runs: [{ text: "유지할 제목", color: "#aabbcc", fontTheme: "heading" }] }] } };

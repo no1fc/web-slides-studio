@@ -6,7 +6,7 @@
 - Use a `main#stage` sized 1920×1080 with `position:relative; transform-origin:0 0`. Put all sibling `section.slide` elements inside it. Use 1–80 slides, normally `position:absolute; inset:0; display:none`; display only `.slide.active`. Initially mark exactly one slide active.
 - Keep text in `h1`–`h4`, `p`, `li`, or other simple DOM text elements. Canvas-rendered words are not editable text. Avoid transforms on text containers when normal layout suffices.
 - The studio handles active slide and stage scale. Standalone navigation must not fight its bridge. If adding standalone controls, initialize them only when `#sd-config` is absent. Do not install global keyboard handlers that consume Tab, editing keys, or presenter keys. Keep controls out of slide content and use natural tab order, never positive `tabindex`.
-- Hide `.notes` visually; their content is imported as speaker notes and is included in shared/downloaded formats.
+- Hide `.notes` visually; their content is imported as speaker notes. New shares omit notes by default; HTML/PPTX exports offer an explicit include-notes option. Do not assume legacy publications have excluded notes.
 - Bundle all images, CSS, fonts, and JS using relative paths. Do not include credentials, environment files, hidden files, symlinks, or development dependencies.
 - ZIP ≤40 MiB, expanded contents ≤64 MiB, ≤300 files. Accepted extensions: `.html .css .js .png .jpg .jpeg .webp .gif .svg .ico .woff .woff2 .ttf .otf .json .mp4 .webm`. `.mjs`, `.gltf`, `.glb`, and `.bin` are not imported.
 
@@ -36,6 +36,9 @@ Discover available tools and their schemas before use; hosts may prefix names.
 
 | Tool | Arguments | Use |
 | --- | --- | --- |
+| `slides_diagnose_connection` | `{}` | Report actual server/auth/tool/workspace checks, adapter version and report time without secrets |
+| `slides_propose_slide` | `deckId`, `revision`, `slideId`, `html`, `css` | Stage a slide proposal for human review; does not save over current state |
+| `slides_propose_state` | `deckId`, `revision`, `state`, optional `summary` | Stage a complete state for human review |
 | `slides_list_decks` | `{}` | Find a deck |
 | `slides_get_deck` | `deckId` | Read revision, state, slide/object IDs and editor link |
 | `slides_create_deck` | optional `title` | Create a blank deck |
@@ -43,6 +46,8 @@ Discover available tools and their schemas before use; hosts may prefix names.
 | `slides_update_slide` | `deckId`, `revision`, `slideId`, `html`, `css` | Replace one validated fragment |
 | `slides_update_state` | `deckId`, `revision`, `state` | Save a complete state based on the read version |
 | `slides_import_bundle` | `path` | Import a local ZIP as a new deck |
+
+Use proposal tools by default and send the user to the editor to compare and apply selected changes. The two `slides_update_*` tools retain direct-save behavior for compatibility; use them only when the user explicitly requests skipping review. Never say a proposal is already applied.
 
 Read IDs from tool responses; do not invent them. `revision` is the positive integer from the current deck. A `revision_conflict` error is not a successful write; reread and reconcile before retrying. Import requires a regular `.zip` inside the configured `SLIDES_STUDIO_WORKSPACE`, with no symlink or path escape. The service revalidates ZIP content.
 

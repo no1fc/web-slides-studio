@@ -1,6 +1,7 @@
 (() => {
   const $ = id => document.getElementById(id);
   const ribbon = $('editorRibbon');
+  const home = $('ribbon-format-tab'); home.parentElement.prepend(home);
   const tabs = [...ribbon.querySelectorAll('[role="tab"]')];
   function activate(tab) {
     for (const item of tabs) {
@@ -9,6 +10,8 @@
       item.tabIndex = selected ? 0 : -1;
       $(item.getAttribute('aria-controls')).hidden = !selected;
     }
+    if (tab.id === 'ribbon-slide-tab') $('ribbon-slide').append($('effectsBtn'));
+    if (tab.id === 'ribbon-transition-tab') $('ribbon-transition').append($('effectsBtn'));
     if (tab.id === 'ribbon-insert-tab') $('ribbon-insert').prepend(quickInsert);
     else ribbon.querySelector('.ribbon-tabs').append(quickInsert);
   }
@@ -74,9 +77,13 @@
   insertHelp.className = 'tool-help';
   insertHelp.textContent = '현재 슬라이드에 개체를 추가합니다. 링크는 선택한 개체에 연결합니다.';
   $('ribbon-insert').append(insertHelp);
-  group($('ribbon-file'), '원본과 파일', ['codeBtn', 'jsonBtn', 'filesBtn', 'versionsBtn'].map($));
-  group($('ribbon-slide'), '슬라이드 디자인', ['layoutBtn', 'themeBtn', 'masterBtn', 'effectsBtn'].map($));
+  group($('ribbon-file'), '파일과 기록', ['filesBtn', 'versionsBtn'].map($));
+  const advanced=document.createElement('details'); advanced.id='advancedTools'; const summary=document.createElement('summary'); summary.textContent='고급 도구'; advanced.append(summary); group(advanced,'코드와 공통 구성',['codeBtn','jsonBtn','masterBtn'].map($)); $('ribbon-file').append(advanced);
+  group($('ribbon-slide'), '슬라이드 디자인', ['layoutBtn', 'themeBtn'].map($));
   $('ribbon-slide').append(document.querySelector('.background-panel'));
+  $('ribbon-transition').append($('effectsBtn'));
+  // Keep the design entry point while sharing the same effects editor.
+  const effectShortcut=document.createElement('button'); effectShortcut.textContent='전환·효과…'; effectShortcut.onclick=()=>$('effectsBtn').click(); $('ribbon-slide').append(effectShortcut);
   $('ribbon-arrange').append(document.querySelector('.arrangement-panel'));
   group($('ribbon-arrange'), '앞뒤 순서', [document.querySelector('.layer-order-actions')]);
   document.querySelector('.inspector-tabs').append($('selectionCount'));
@@ -101,11 +108,15 @@
   ]);
   textTools.append($('textOverflowNote'));
   properties.prepend(textTools);
+  textTools.append($('textAlignValue').closest('label'));
+  const side=document.createElement('section'); side.className='selection-properties'; side.setAttribute('aria-label','선택한 대상 속성'); side.append(dimensions,actions);
+  document.querySelector('.inspector-tabs').after(side);
   const sync = () => {
+    side.hidden=properties.hidden;
     for (const [button, field] of [[editText, $('textField')], [image, $('imageTools')], [shape, $('shapeTools')]]) {
       if (button.hidden !== field.hidden) button.hidden = field.hidden;
     }
-    for (const dialog of properties.querySelectorAll('dialog[open]')) {
+    for (const dialog of document.querySelectorAll('#properties dialog[open],.selection-properties dialog[open]')) {
       if (properties.hidden) dialog.close();
     }
   };

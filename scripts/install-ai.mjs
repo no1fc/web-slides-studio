@@ -1,10 +1,12 @@
 #!/usr/bin/env node
-import { cp, mkdir, readFile, readdir, stat } from 'node:fs/promises';
+import { cp, mkdir, readFile, readdir, stat, writeFile, chmod } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { parseArgs } from 'node:util';
+import { createInterface } from 'node:readline/promises';
+import { Writable } from 'node:stream';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const name = 'web-slides-studio';
@@ -22,6 +24,32 @@ async function equalTree(a, b) {
     else if (!(await stat(y)).isFile() || !(await readFile(x)).equals(await readFile(y))) return false;
   }
   return true;
+}
+// Passwords are entered on a real terminal, never echoed or passed in command arguments.
+export async function configure(options, { home = homedir(), askPassword } = {}) {
+  const directory = join(home, '.slides-studio');
+  const workspace = resolve(options.workspace || join(directory, 'workspace'));
+  const passwordFile = resolve(options['password-file'] || join(directory, 'password'));
+  await mkdir(directory, { recursive: true, mode: 0o700 });
+  await mkdir(workspace, { recursive: true });
+  if (!await exists(passwordFile)) {
+    if (!askPassword) {
+      if (!process.stdin.isTTY) throw new Error('Run --setup in an interactive terminal, or prepare a private --password-file.');
+      askPassword = async () => {
+        process.stderr.write('Studio login password (hidden; Enter for a server without a password): ');
+        const output = new Writable({ write(_chunk, _encoding, done) { done(); } });
+        const rl = createInterface({ input: process.stdin, output, terminal: true });
+        try { return await rl.question(''); }
+        finally { rl.close(); process.stderr.write('\n'); }
+      };
+    }
+    const password = await askPassword();
+    if (password) {
+      await writeFile(passwordFile, password + '\n', { mode: 0o600, flag: 'wx' });
+      if (process.platform !== 'win32') await chmod(passwordFile, 0o600);
+    }
+  }
+  return { ...options, workspace, ...(await exists(passwordFile) ? { 'password-file': passwordFile } : {}) };
 }
 export async function install(options, { home = homedir(), runner = run, repository = root } = {}) {
   const client = options.client || 'all';
@@ -71,8 +99,8 @@ export async function install(options, { home = homedir(), runner = run, reposit
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    const { values } = parseArgs({ options: { client: { type: 'string' }, url: { type: 'string' }, 'password-file': { type: 'string' }, workspace: { type: 'string' }, replace: { type: 'boolean' }, help: { type: 'boolean' } } });
-    if (values.help) console.log('node scripts/install-ai.mjs --client codex|claude|all --url https://slides.example.com --password-file /private/password.txt --workspace /path/to/decks [--replace]\nRegisters a user-scope stdio MCP server and copies the authoring Skill. Keep this repository at its installed path.');
-    else console.log(`Installed for: ${(await install(values)).join(', ')}. Restart your AI client and enable the tools. Credentials are read only by the MCP server.`);
+    const { values } = parseArgs({ options: { client: { type: 'string' }, url: { type: 'string' }, 'password-file': { type: 'string' }, workspace: { type: 'string' }, replace: { type: 'boolean' }, setup: { type: 'boolean' }, help: { type: 'boolean' } } });
+    if (values.help) console.log('node scripts/install-ai.mjs --client codex|claude|all --url https://slides.example.com --password-file /private/password.txt --workspace /path/to/decks [--setup] [--replace]\n--setup privately prompts for a password and creates a local ZIP workspace. Never put passwords in commands.\nRegisters a user-scope stdio MCP server and copies the authoring Skill. Keep this repository at its installed path.');
+    else console.log(`Installed for: ${(await install(values.setup ? await configure(values) : values)).join(', ')}. Restart your AI client and enable the tools. Credentials are read only by the MCP server.`);
   } catch (error) { console.error(error.message); process.exitCode = 1; }
 }

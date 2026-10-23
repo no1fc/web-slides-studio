@@ -28,25 +28,28 @@ Studio의 키보드·발표 이동과 충돌하지 않게 하고 Tab을 전역 �
 ZIP 40 MiB, 압축 해제 64 MiB, 300파일, 1~80장 이내로 준비하세요.
 모든 장의 잘림·자산 누락·한글·이동·링크를 확인하세요.
 가능하면 Studio에 가져온 뒤 글 수정→저장→새로고침까지 검증하세요.
-MCP로 기존 자료를 수정할 때는 현재 상태와 revision을 읽고 충돌 시 다시 확인하세요.
+MCP로 기존 자료를 수정할 때는 현재 상태와 revision을 읽고 slides_propose_slide 또는 slides_propose_state로 변경안을 만드세요. 웹 편집기의 AI 변경 비교에서 사용자가 선택 적용하기 전에는 저장본을 덮어쓰지 마세요. 충돌 시 최신 내용을 다시 확인하세요.
 HTML/CSS 편집창에는 슬라이드 내부 HTML/CSS만 넣고 JS·canvas를 붙이지 마세요.
 PDF는 이미지이며, 편집 가능 PPTX도 3D·복잡한 CSS는 배경 이미지임을 알려 주세요.
 완료하면 ZIP/원본 파일 또는 편집 링크와 실제 검사 결과·미확인 항목을 주세요.
 ```
 
-장수·시각 효과는 내용에 맞춰 정합니다. 모든 장에 3D나 차트를 넣을 필요는 없습니다. 비공개 자료·암호는 프롬프트나 발표자 노트에 넣지 마세요. 노트는 공유·HTML·PPTX에 포함됩니다.
+장수·시각 효과는 내용에 맞춰 정합니다. 모든 장에 3D나 차트를 넣을 필요는 없습니다. 비공개 자료·암호는 프롬프트나 발표자 노트에 넣지 마세요. 새 공유본은 노트를 기본 제외하며 HTML·PPTX 내보내기에서 포함 여부를 선택합니다. 기존 공유본은 다시 게시하기 전까지 이전 설정을 유지합니다.
 
 ## Codex·Claude Code 연결
 
-Node.js 20.19 이상(22 LTS 권장)과 사용할 클라이언트 CLI가 필요합니다. 저장소를 유지할 위치에 둔 뒤 해당 폴더에서 실행하세요. MCP가 이 경로의 파일을 실행하므로 설치 후 저장소를 옮기면 다시 연결해야 합니다.
+설정의 **AI 연결**에서 외부 PC의 Windows/macOS/Linux와 Codex/Claude Code를 선택하면 설치 명령과 연결 확인 프롬프트를 복사할 수 있습니다. 기존 https://slides.sdlab.kr 서버에 연결하는 PC에는 웹 서버나 Docker를 설치하지 않습니다.
+
+Git, Node.js 20.19 이상과 사용할 클라이언트 CLI가 필요합니다. 저장소를 유지할 위치에 둔 뒤 해당 폴더에서 실행하세요. MCP가 이 경로의 파일을 실행하므로 설치 후 저장소를 옮기면 다시 연결해야 합니다.
 
 ```bash
-npm ci
-npm ci --prefix integrations/mcp
-node scripts/install-ai.mjs --client codex --url http://127.0.0.1:4310
+npm ci --prefix integrations/mcp --ignore-scripts
+node scripts/install-ai.mjs --client codex --url https://slides.sdlab.kr --setup
 ```
 
 Windows에서도 같은 `node scripts/install-ai.mjs` 명령을 사용합니다. npm 설치본의 `claude.cmd`·`codex.cmd`와 네이티브 실행 파일을 처리하며, 공백이 있는 경로는 따옴표로 감싸세요. 기존 버전에서 CLI를 찾지 못했다면 저장소를 업데이트하고 `npm ci --prefix integrations/mcp --ignore-scripts`를 다시 실행한 뒤 설치를 재시도합니다.
+
+`--setup`은 터미널에서 암호를 숨겨 입력받아 외부 PC의 `~/.slides-studio/password`에 저장하고 `~/.slides-studio/workspace`를 ZIP 허용 폴더로 만듭니다. 암호값은 명령 인자·로그·웹 화면에 넣지 않습니다. 기존 암호 파일이 있으면 재사용합니다. 암호를 변경했다면 이 비공개 파일을 직접 수정하고 AI 앱을 재시작하세요.
 
 Claude Code는 `--client claude`, 두 클라이언트는 `--client all`입니다. `all`은 설치된 CLI를 확인합니다. 이 명령은 Studio 서버 자체를 시작하지 않습니다. 로컬 서버 실행은 [README](../README.md)를 따르세요.
 
@@ -71,7 +74,11 @@ MCP 없이 쓰려면 저장소의 [skills/web-slides-author](../skills/web-slide
 
 ### 연결 확인과 기존 자료 수정
 
-AI에 “Web Slides Studio 자료 목록을 읽어 주세요”라고 요청해 `slides_list_decks` 연결을 확인합니다. 기존 자료는 `slides_get_deck`로 현재 `revision`, `state`, 슬라이드 ID를 읽습니다. 한 장의 코드를 바꿀 때는 `slides_get_slide_source` 다음 `slides_update_slide`를 사용합니다. 전체 상태를 바꿀 때만 `slides_update_state`를 사용하고 다른 장·노트·마스터를 유지합니다.
+AI에 `slides_diagnose_connection` 실행을 요청하면 실제 서버 접속·인증·도구 호출·ZIP 작업 폴더를 구분하여 확인합니다. 인증된 보고만 서버에 저장되며 설정 화면은 MCP가 보고한 버전, 서버가 받은 UTC 시각(KST로 표시), 각 결과를 보여 줍니다. 웹사이트는 외부 PC를 직접 검사하지 않습니다. 접속·인증 실패는 보고를 보낼 수 없으므로 AI 앱에서 확인해야 하며 웹의 마지막 성공 보고는 갱신되지 않습니다. 보고된 버전이 최소 요구 버전보다 낮으면 업데이트 안내가 표시됩니다.
+
+AI에 “Web Slides Studio 자료 목록을 읽어 주세요”라고 요청해 `slides_list_decks` 연결을 확인합니다. 기존 자료는 `slides_get_deck`로 현재 `revision`, `state`, 슬라이드 ID를 읽습니다. 한 장의 코드를 바꿀 때는 `slides_get_slide_source` 다음 `slides_propose_slide`를 사용합니다. 전체 상태를 바꿀 때만 `slides_propose_state`를 사용하고 다른 장·노트·마스터를 유지합니다.
+
+제안은 현재 저장본을 변경하지 않습니다. 웹 편집기의 **AI 변경 비교**에서 전후 화면과 변경 요약을 보고 적용할 장을 선택하거나 취소합니다. 적용 후 잘못된 변경은 저장 버전에서 복원합니다. 기존 `slides_update_slide`와 `slides_update_state`는 호환성을 위해 직접 저장 동작을 유지하므로 사용자가 명시적으로 비교 생략을 요청한 경우에만 사용합니다.
 
 저장 도중 다른 창이 수정하면 `revision_conflict`로 거부합니다. AI는 최신 상태를 다시 읽고 변경을 합쳐야 합니다. 새 revision 숫자만 바꾸어 기존 내용을 덮어쓰면 안 됩니다. `slides_import_bundle`은 ZIP을 **새 자료**로 가져오며 기존 자료의 원본 JS를 교체하지 않습니다. 이 MCP에는 공유 게시·삭제 도구가 없습니다.
 

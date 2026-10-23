@@ -113,3 +113,26 @@ test('slides directly under body fit and native Tab reaches slide links and cont
   await page.keyboard.press('Tab');
   assert.equal(await page.evaluate(() => document.activeElement.getAttribute('aria-label')), '전체 화면');
 }, false, true));
+
+
+test('shared presentation displays published version and KST seconds without inventing missing dates', () => fixture(async ({page,app,deck,url}) => {
+  assert.equal(await page.locator('#sd-publication-info').count(), 0);
+  const meta = await app.store.publish(deck.id);
+  meta.publishedAt = '2026-10-23T05:32:08.000Z';
+  await app.store.atomic(app.store.path(deck.id, 'meta.json'), meta);
+  const shareUrl = `${app.contentOrigin}/v/${deck.id}/${meta.shareToken}/index.html`;
+  await page.goto(shareUrl);
+  await page.locator('#sd-publication-info').waitFor();
+  assert.equal(await page.locator('#sd-publication-info').textContent(), `공유 v${meta.publishedRevision} · 게시 2026-10-23 14:32:08 (KST)`);
+  await page.goto(shareUrl + '?presentView=1');
+  await page.waitForFunction(() => !!window.__sd);
+  assert.equal(await page.locator('#sd-publication-info').count(), 0);
+  delete meta.publishedAt;
+  await app.store.atomic(app.store.path(deck.id, 'meta.json'), meta);
+  await page.goto(shareUrl);
+  await page.locator('#sd-publication-info').waitFor();
+  assert.equal(await page.locator('#sd-publication-info').textContent(), `공유 v${meta.publishedRevision} · 게시 기록 없음`);
+  await page.goto(url);
+  await page.waitForFunction(() => !!window.__sd);
+  assert.equal(await page.locator('#sd-publication-info').count(), 0);
+}));

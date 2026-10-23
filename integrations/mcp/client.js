@@ -140,6 +140,6 @@ export class StudioClient {
   }
   async save(deckId, revision, state) {
     const validated = await this.request(`/decks/${deckId}/validate`, 'POST', { state });
-    return this.summary(await this.request(`/decks/${deckId}/save`, 'POST', { revision, state: validated.state }));
+    return this.summary(await this.request(`/decks/${deckId}/save`, 'POST', { revision, state: validated.state, source: "ai", summary: "AI 직접 저장" }));
   }
 }

@@ -1,0 +1,7 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SDLAB Slides · 발표자 화면</title><link rel="stylesheet" href="/presenter.css"><script defer src="/presenter.js"></script></head>
+<body class="presenter-page"><header><a id="returnEditor" href="/">편집기로 돌아가기</a><strong id="presentTitle">발표자 화면</strong><span id="elapsed" role="timer" aria-label="발표 시간">00:00</span><button id="resetTimer">타이머 초기화</button></header>
+<main id="presentLayout"><section class="current"><h1>현재 슬라이드 <span id="slideCount"></span></h1><iframe id="currentSlide" title="현재 발표 슬라이드" allow="fullscreen"></iframe></section><section class="next"><h2>다음 슬라이드</h2><iframe id="nextSlide" title="다음 발표 슬라이드" tabindex="-1"></iframe><p id="lastSlide" hidden>마지막 슬라이드입니다.</p></section><section class="notes"><h2>발표자 노트 · 나에게만 표시</h2><div id="presentNotes"></div></section></main>
+<nav aria-label="발표 제어"><button id="previousSlide">← 이전</button><button id="nextButton">다음 →</button><button id="openAudience">청중 화면 열기</button><button id="singleScreen">이 화면으로 발표</button><button id="fullScreen">전체 화면</button><button id="blackScreen" aria-pressed="false">검은 화면 (B)</button><button id="laserPointer" aria-pressed="false">레이저 (L)</button></nav>
+<p id="presentStatus" role="status">두 화면 사용: 청중 화면을 다른 모니터로 옮기세요. 화면 하나: ‘이 화면으로 발표’를 누르면 노트가 숨겨집니다. Esc로 발표자 화면으로 돌아옵니다.</p>
+</body></html>

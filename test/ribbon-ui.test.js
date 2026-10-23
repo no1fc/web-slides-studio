@@ -39,12 +39,12 @@ test('ribbon fits laptop and desktop without page or inspector overflow', () => 
 }));
 test('keyboard tabs, top formatting, and property dialogs edit the real slide', () => fixture(async ({ app, deck, page }) => {
   await page.locator('#ribbon-format-tab').focus(); await page.keyboard.press('ArrowRight');
-  assert.equal(await page.locator('#ribbon-arrange-tab').getAttribute('aria-selected'), 'true');
+  assert.equal(await page.locator('#ribbon-insert-tab').getAttribute('aria-selected'), 'true');
   await page.keyboard.press('End'); assert.equal(await page.locator('#ribbon-file-tab').evaluate(el => el === document.activeElement), true);
-  await page.keyboard.press('Home'); assert.equal(await page.locator('#ribbon-insert-tab').getAttribute('aria-selected'), 'true');
-  await page.keyboard.press('ArrowRight'); await page.locator('#italicTextBtn').click();
+  await page.keyboard.press('Home'); assert.equal(await page.locator('#ribbon-format-tab').getAttribute('aria-selected'), 'true');
+  await page.locator('#italicTextBtn').click();
   await page.waitForFunction(() => document.querySelector('#italicTextBtn').getAttribute('aria-pressed') === 'true');
-  await page.locator('#paragraphSettingsBtn').click(); await page.locator('#textAlignValue').selectOption('center'); await page.waitForFunction(() => !document.querySelector('#paragraphSettingsBtn').disabled); await page.keyboard.press('Escape');
+  await page.locator('#textAlignValue').selectOption('center'); await page.locator('#paragraphSettingsBtn').click(); await page.waitForFunction(() => !document.querySelector('#paragraphSettingsBtn').disabled); await page.keyboard.press('Escape');
   assert.equal(await page.locator('#paragraphSettings').evaluate(el => el.open), false);
   assert.equal(await page.locator('#paragraphSettingsBtn').evaluate(el => el === document.activeElement), true);
   await page.locator('#textContentSettingsBtn').click(); await page.locator('#textValue').fill('상단 리본에서 고친 내용'); await page.locator('#textValue').dispatchEvent('change');

@@ -114,7 +114,7 @@ richText 하나는 최대 500문단·5,000 run·100,000 UTF-16 단위의 문자(
 | POST `/api/decks/:id/save` | `{revision,state}` 저장 |
 | GET `/api/decks/:id/authoring?slide=s0` | 현재 저장 상태의 슬라이드 편집 소스 `{slide,html,css}` 조회 |
 | POST `/api/decks/:id/validate` | `{state}` 검증·정규화 후 `{state}` 반환. 저장하지 않음 |
-| GET `/api/decks/:id/revisions` | 최근 최대 100개 이력 목록 |
+| GET `/api/decks/:id/revisions` | 전체 이력 최신순 목록 |
 | POST `/api/decks/:id/restore` | `{revision,target}`로 복원 |
 | POST `/api/decks/:id/duplicate` | 독립 사본 생성 |
 | POST `/api/decks/:id/publish` | `{enabled}` 공유·철회 |
@@ -198,7 +198,7 @@ PDF와 외형 보존 PPTX는 슬라이드 캡처이고, 편집 가능 PPTX는 �
 
 `public/slide-ui.js`가 순서와 별도로 다중 선택·범위 기준점을 관리한다. 상태 변경은 iframe 입력 확정 → 후보 검증 → history → 저장 → 프레임 갱신 순서다. 검증 중 다른 편집이 발생하면 후보를 적용하지 않는다. Undo의 활성 슬라이드는 가능하면 ID로 유지한다. 노트 입력은 즉시 현재 장 상태에 반영하고 자동 저장한다.
 
-노트는 명시적 빈 문자열과 미지정 상태를 구분한다. 미지정 노트는 원본 `.notes`/복제 원본에서 읽으며 큰 원본 노트는 `sourceNotes` 응답으로 보존하고 새 편집 상태에 강제로 넣지 않는다. 직접 편집한 notes 값은 20,000자와 전체 2MB 제한을 따른다. 과거 revision은 다시 쓰지 않는다. 렌더링은 텍스트로 `.notes`에 넣고 PPTX에는 사용자 노트와 출력 출처를 기록한다. 공유·HTML에 포함되는 콘텐츠이며 비밀 메모가 아니다.
+노트는 명시적 빈 문자열과 미지정 상태를 구분한다. 미지정 노트는 원본 `.notes`/복제 원본에서 읽으며 큰 원본 노트는 `sourceNotes` 응답으로 보존하고 새 편집 상태에 강제로 넣지 않는다. 직접 편집한 notes 값은 20,000자와 전체 2MB 제한을 따른다. 과거 revision은 다시 쓰지 않는다. 렌더링은 텍스트로 `.notes`에 넣고 PPTX에는 사용자 노트와 출력 출처를 기록한다. 새 공유·출력은 노트를 기본 제외한다. 포함을 명시한 경우에만 제공하며 기존 공유는 재게시 전까지 이전 정책을 유지한다.
 
 `mode=thumbnail&slide=<id>`는 해당 리비전의 선택 슬라이드를 1920×1080 정적 문서로 제공한다. `src/thumbnail.js`가 원본 script/event/iframe/canvas 등을 제거하고 조상 CSS 선택자를 위한 DOM 경로와 스타일·이미지를 보존한다. nonce CSP로 배포한 텍스트·개체 렌더러만 실행하며 편집 bridge는 넣지 않는다. 목록에서는 IntersectionObserver로 화면 주변 iframe만 로드하고 선택만 바뀌면 기존 iframe을 재사용한다.
 
@@ -215,3 +215,12 @@ PDF와 외형 보존 PPTX는 슬라이드 캡처이고, 편집 가능 PPTX는 �
 원본·이전 업로드 파일은 기본적으로 보호합니다. 이후 API로 추가한 이미지는 meta에 기록하며, 모든 revision과 HTML/CSS/JS/JSON 텍스트에서 사용을 검사합니다. 참조가 없는 추가 이미지에 한해 삭제를 허용합니다. 임의 JavaScript의 동적 동작을 완전히 정적 분석하는 시스템은 아니므로 직접 파일 구조를 바꾸는 고급 사용자는 별도 백업을 권장합니다.
 
 삭제·업로드·저장·복제·출력 접수는 자료별 잠금과 검사를 사용합니다. 삭제된 이미지를 늦게 저장하려는 요청은 거부하며, 사용 중인 이력을 자동으로 잘라내지 않습니다.
+
+
+## 변경안·공유 정책·재사용
+
+`src/workflows.js`는 불변 기본 revision을 참조하는 제안 파일을 별도 보관한다. 선택 적용은 최신 revision 비교 후 Store.save를 통해 새 이력을 만든다. 취소는 제안 상태만 바꾼다. 템플릿/브랜드는 별도 데이터 경로에 자산을 복사하며 원본 상태와 독립한다.
+
+게시 정책은 메타데이터에 UTC publishedAt/expiresAt, includeNotes와 scrypt 암호 해시를 보관한다. 서버는 모든 공유 자산 요청에서 만료·철회·접근 세션을 검증한다. 재게시는 세션 세대를 바꾸며 비밀번호와 해시는 API 응답에 노출하지 않는다. 노트 제외는 HTML/상태/내보내기 단계에서 적용하고 청중용 /a 경로는 자산에도 적용한다.
+
+업로드 X-Import-Key는 본문 SHA-256과 대조한 뒤 직렬 생성하며 이미 성공한 활성 자료를 반환한다. 재시도는 동일 자료를 중복 생성하지 않는다. MCP 연결 진단은 인증된 MCP 보고이며 외부 PC를 웹 서버가 직접 검사하는 기능이 아니다.
