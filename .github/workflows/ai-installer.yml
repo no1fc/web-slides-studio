@@ -4,6 +4,7 @@ on:
     paths:
       - scripts/install-ai.mjs
       - test/ai-installer.test.js
+      - integrations/mcp/test/installer.test.js
       - integrations/mcp/package.json
       - integrations/mcp/package-lock.json
       - .github/workflows/ai-installer.yml
@@ -11,6 +12,7 @@ on:
     paths:
       - scripts/install-ai.mjs
       - test/ai-installer.test.js
+      - integrations/mcp/test/installer.test.js
       - integrations/mcp/package.json
       - integrations/mcp/package-lock.json
       - .github/workflows/ai-installer.yml
@@ -24,11 +26,11 @@ jobs:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: integrations/mcp/package-lock.json
       - run: npm ci --prefix integrations/mcp --ignore-scripts
-      - run: node --test test/ai-installer.test.js
+      - run: node --test test/ai-installer.test.js integrations/mcp/test/installer.test.js

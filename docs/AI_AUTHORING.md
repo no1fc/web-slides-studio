@@ -46,6 +46,8 @@ npm ci --prefix integrations/mcp
 node scripts/install-ai.mjs --client codex --url http://127.0.0.1:4310
 ```
 
+Windows에서도 같은 `node scripts/install-ai.mjs` 명령을 사용합니다. npm 설치본의 `claude.cmd`·`codex.cmd`와 네이티브 실행 파일을 처리하며, 공백이 있는 경로는 따옴표로 감싸세요. 기존 버전에서 CLI를 찾지 못했다면 저장소를 업데이트하고 `npm ci --prefix integrations/mcp --ignore-scripts`를 다시 실행한 뒤 설치를 재시도합니다.
+
 Claude Code는 `--client claude`, 두 클라이언트는 `--client all`입니다. `all`은 설치된 CLI를 확인합니다. 이 명령은 Studio 서버 자체를 시작하지 않습니다. 로컬 서버 실행은 [README](../README.md)를 따르세요.
 
 원격 서버 또는 ZIP 자동 가져오기를 쓸 때는 다음처럼 설정합니다. 예시 경로를 본인 환경으로 바꾸세요.

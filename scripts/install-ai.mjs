@@ -3,12 +3,14 @@ import { cp, mkdir, readFile, readdir, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { spawnSync } from 'node:child_process';
+import { createRequire } from 'node:module';
 import { parseArgs } from 'node:util';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const name = 'web-slides-studio';
-const run = (command, args) => spawnSync(command, args, { encoding: 'utf8', timeout: 30000, stdio: ['ignore', 'pipe', 'pipe'] });
+const requireMcp = createRequire(new URL('../integrations/mcp/package.json', import.meta.url));
+// npm's Windows .cmd shims need PATH/PATHEXT resolution and argument escaping.
+const run = (command, args) => requireMcp('cross-spawn').sync(command, args, { encoding: 'utf8', timeout: 30000, stdio: ['ignore', 'pipe', 'pipe'] });
 async function exists(path) { try { await stat(path); return true; } catch (e) { if (e.code === 'ENOENT') return false; throw e; } }
 async function equalTree(a, b) {
   const entries = await readdir(a, { withFileTypes: true });
