@@ -1,3 +1,4 @@
+import { clickEditorTool, openRibbonTab } from './editor-ui-helpers.js';
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp } from "node:fs/promises";
@@ -43,13 +44,13 @@ test("scene overrides survive duplication and original option removes override",
   fixture(async (app, browser, d) => {
     const p = await open(app, browser, d);
     const sceneSaved = p.waitForResponse(r => r.url().endsWith("/save") && r.request().method() === "POST");
-    await p.locator("#ribbon-slide-tab").click();
+    await openRibbonTab(p, 'slide');
   await p.locator("#sceneValue").selectOption("dim");
     await sceneSaved;
     await p.waitForFunction(() => document.querySelector("#saveStatus").textContent.startsWith("저장됨"));
     const frameSource = await p.locator("#deckFrame").getAttribute("src");
     const duplicated = p.waitForResponse(r => r.url().endsWith("/save") && r.request().method() === "POST");
-    await p.locator("#duplicateSlideBtn").click();
+    await clickEditorTool(p, 'duplicateSlideBtn');
     await duplicated;
     await p.waitForFunction(source => document.querySelector("#deckFrame").getAttribute("src") !== source, frameSource);
     await p.frameLocator("#deckFrame").locator(".slide.active").waitFor();
@@ -58,7 +59,7 @@ test("scene overrides survive duplication and original option removes override",
     assert.equal(s.scenes[copyId], "dim");
     const restored = p.waitForResponse(r => r.url().endsWith("/save") && r.request().method() === "POST");
     await p.locator("#slideList .slide-item").first().click();
-    await p.locator("#ribbon-slide-tab").click();
+    await openRibbonTab(p, 'slide');
   await p.locator("#sceneValue").selectOption("");
     await restored;
     s = (await app.store.get(d.id)).state;
@@ -69,7 +70,7 @@ test("scene input is preserved while a queued frame navigation settles editing",
   fixture(async (app, browser, d) => {
     const p = await open(app, browser, d);
     const firstSave = p.waitForResponse(r => r.url().endsWith("/save") && r.request().method() === "POST");
-    await p.locator("#ribbon-slide-tab").click();
+    await openRibbonTab(p, 'slide');
   await p.locator("#sceneValue").selectOption("dim");
     await firstSave;
     await p.waitForFunction(() => document.querySelector("#saveStatus").textContent.startsWith("저장됨"));
@@ -105,8 +106,8 @@ test("conflicting edits can be saved deliberately as a new version", () =>
     ]) {
       const f = p.frames().find((f) => f.url().startsWith(app.contentOrigin));
       await f.locator(".slide.active h1").click();
-      await p.locator("#ribbon-format-tab").click();
-      await p.locator("#textContentSettingsBtn").click();
+      await openRibbonTab(p, 'format');
+      await clickEditorTool(p, 'textContentSettingsBtn');
       await p.locator("#textValue").fill(text);
       await p.locator("#textValue").dispatchEvent("change");
       await p.locator("#textContentSettings").getByRole("button", { name: "닫기", exact: true }).click();

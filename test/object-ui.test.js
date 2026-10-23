@@ -1,3 +1,4 @@
+import { clickEditorTool } from './editor-ui-helpers.js';
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -60,7 +61,7 @@ async function fixture(fn) {
 
 test("shape inspector edits native geometry and border, preserving legacy shape fill", () => fixture(async ({ page, select, change, saved }) => {
   await select(info("a-one", { shape }));
-  await page.locator("#shapeSettingsBtn").click();
+  await clickEditorTool(page, 'shapeSettingsBtn');
   assert.equal(await page.locator("#shapeTools").isVisible(), true);
   assert.equal(await page.locator("#textField").isHidden(), true);
   await change("shapeTypeValue", "ellipse");
@@ -78,7 +79,7 @@ test("shape inspector edits native geometry and border, preserving legacy shape 
 
 test("image inspector stores non-destructive crop, rejects empty crop and resets", () => fixture(async ({ page, select, change, saved }) => {
   await select(info("a-image", { tag: "img", kind: "image", image, w: 400, h: 200 }));
-  await page.locator("#imageSettingsBtn").click();
+  await clickEditorTool(page, 'imageSettingsBtn');
   await change("imageModeValue", "fit");
   await change("cropLeftValue", "20");
   await change("cropRightValue", "10");
@@ -146,7 +147,7 @@ test("group numeric resize enforces uniform scale and ungroup preserves transfor
 }));
 
 test("shape insert offers four native types and saves the chosen arrow", () => fixture(async ({ page, saved }) => {
-  await page.locator("#addShapeBtn").click();
+  await clickEditorTool(page, 'addShapeBtn');
   await page.locator("#dialog[open]").waitFor();
   assert.equal(await page.locator("#dialogBody [data-shape-type]").count(), 4);
   await page.locator('[data-shape-type="arrow"]').click();

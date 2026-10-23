@@ -1,3 +1,4 @@
+import { clickEditorTool, showEditorControl } from './editor-ui-helpers.js';
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -29,7 +30,8 @@ async function saved(page) { await page.waitForFunction(() => document.querySele
 async function setting(page, id, action) {
   const control = page.locator("#" + id);
   const dialogId = await control.evaluate(el => el.closest("dialog")?.id);
-  if (dialogId) await page.locator("#" + dialogId + "Btn").click();
+  if (dialogId) await clickEditorTool(page, dialogId + "Btn");
+  else await showEditorControl(page, id);
   const collapsed = control.locator("xpath=ancestor::details[not(@open)]");
   if (await collapsed.count()) await collapsed.locator("summary").click();
   await action(control);
@@ -76,7 +78,7 @@ test("a selection survives toolbar focus and only selected letters gain style ac
   await page.locator("#underlineTextBtn").click(); await saved(page);
   rich = (await app.store.get(deck.id)).state.patches["a-text"].richText;
   assert.equal(rich.paragraphs[0].runs[1].underline, true); assert.equal(rich.paragraphs[0].runs[0].underline, false);
-  await page.locator("#duplicateObjectsBtn").click();
+  await clickEditorTool(page, 'duplicateObjectsBtn');
   await frame.locator('[data-sd-added="true"]').nth(1).waitFor(); await saved(page);
   const added = (await app.store.get(deck.id)).state.added;
   assert.deepEqual(added[1].richText, rich);
@@ -301,7 +303,7 @@ test("omitted run sizes inherit the text box font and copied text resolves inher
   }));
   assert.deepEqual(sizes.rendered, [64, 48]);
   assert.deepEqual(sizes.resolved, [64, 48]);
-  await text.click(); await page.locator("#duplicateObjectsBtn").click();
+  await text.click(); await clickEditorTool(page, 'duplicateObjectsBtn');
   await frame.locator('[data-sd-added="true"]').nth(1).waitFor(); await saved(page);
   const runs = (await app.store.get(deck.id)).state.added[1].richText.paragraphs[0].runs;
   assert.deepEqual(runs.map(run => run.fontSize), [64, 48]);

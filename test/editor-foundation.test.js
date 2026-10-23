@@ -1,3 +1,4 @@
+import { openRibbonTab, showEditorControl } from './editor-ui-helpers.js';
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -66,7 +67,7 @@ test("added elements report their base coordinates and one-axis edits preserve t
   await page.waitForFunction(() => document.querySelector("#xValue").value === "150");
   assert.equal(await page.locator("#xValue").inputValue(), "150");
   assert.equal(await page.locator("#yValue").inputValue(), "160");
-  await page.locator("#yValue").fill("220");
+  await showEditorControl(page, 'yValue'); await page.locator("#yValue").fill("220");
   await page.locator("#yValue").dispatchEvent("change");
   assert.equal(await element(frame).evaluate(e => e.style.translate), "150px 220px");
   await page.waitForFunction(() => document.querySelector("#saveStatus").textContent.startsWith("저장됨"));
@@ -174,8 +175,8 @@ test("undo immediately after text editing restores the previous content", () => 
 test("opening JSON settles direct text edits before taking the snapshot", () => fixture(async ({ page, frame }) => {
   await element(frame).dblclick();
   await element(frame).fill("JSON에도 보존할 내용");
-  await page.locator("#ribbon-file-tab").click();
-  await page.locator("#ribbon-file-tab").click();
+  await openRibbonTab(page, 'file');
+  await openRibbonTab(page, 'file');
   await page.locator("#advancedTools").evaluate(e => e.open = true);
   await page.locator("#jsonBtn").click();
   const field = page.locator("#jsonState");

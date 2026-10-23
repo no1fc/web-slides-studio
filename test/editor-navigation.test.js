@@ -1,3 +1,4 @@
+import { openRibbonTab } from './editor-ui-helpers.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp, rm} from 'node:fs/promises';
@@ -71,17 +72,20 @@ test('overview reuses thumbnail rows, flushes edits, navigates by keyboard and r
   assert.equal(await page.locator('#slideOverviewBtn').evaluate(node => node === document.activeElement), true);
 }));
 
-test('collapsed ribbon expands canvas on laptop and opens again when a tab is selected', () => fixture(async ({page}) => {
+test('tool popover preserves the laptop canvas and reopens through visible header menus', () => fixture(async ({page}) => {
  for (const viewport of [{width: 1366, height: 768}, {width: 1280, height: 720}]) {
   await page.setViewportSize(viewport);
+  assert.equal(await page.locator('#editorRibbon').isVisible(), false);
   const before = await page.locator('#canvasViewport').boundingBox();
-  await page.locator('#collapseRibbonBtn').click();
-  await page.waitForFunction(() => document.querySelector('#editorRibbon').classList.contains('ribbon-collapsed'));
-  await page.waitForFunction(height => document.querySelector('#canvasViewport').getBoundingClientRect().height > height + 70, before.height);
-  assert.equal(await page.locator('#collapseRibbonBtn').getAttribute('aria-expanded'), 'false');
-  await page.locator('#ribbon-insert-tab').click();
-  assert.equal(await page.locator('#collapseRibbonBtn').getAttribute('aria-expanded'), 'true');
+  await openRibbonTab(page, 'insert');
   assert.equal(await page.locator('#addTableBtn').isVisible(), true);
+  await page.locator('#collapseRibbonBtn').click();
+  await page.locator('#editorRibbon').waitFor({state:'hidden'});
+  const after = await page.locator('#canvasViewport').boundingBox();
+  assert.ok(Math.abs(after.height-before.height)<2, 'popover leaves the canvas layout unchanged');
+  await page.locator('#insertToolsBtn').click();
+  assert.equal(await page.locator('#addTableBtn').isVisible(), true);
+  await page.locator('#collapseRibbonBtn').click();
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   await page.screenshot({path: `/tmp/slides-navigation-${viewport.width}.png`});
  }

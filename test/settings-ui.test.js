@@ -1,3 +1,4 @@
+import { openRibbonTab } from './editor-ui-helpers.js';
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp } from "node:fs/promises";
@@ -25,7 +26,7 @@ test("file manager downloads files and password form validates, changes and logs
     assert.equal(await p.locator("#passwordBtn").count(), 1);
     await p.locator("#newBtn").click();
     await p.waitForSelector("#editor:not([hidden])");
-    await p.locator("#ribbon-file-tab").click();
+    await openRibbonTab(p, 'file');
   await p.locator("#filesBtn").click();
     await p.waitForSelector(".file-row");
     assert.match(await p.locator("#dialogBody").innerText(), /ZIP 자체는/);
@@ -37,7 +38,8 @@ test("file manager downloads files and password form validates, changes and logs
     await p.locator(".file-row a").first().click();
     assert.equal((await downloaded).suggestedFilename(), "index.html");
     await p.locator("#closeDialog").click();
-    await p.locator("#passwordBtn").click();
+    await p.locator("#editorSettingsBtn").click();
+    await p.locator("#settingsPasswordBtn").click();
     await p.locator("#currentPassword").fill("wrong");
     await p.locator("#newPassword").fill("new-password-789");
     await p.locator("#confirmPassword").fill("new-password-789");
@@ -55,6 +57,7 @@ test("file manager downloads files and password form validates, changes and logs
     await p.locator("#confirmPassword").fill("new-password-789");
     await p.locator("#passwordForm button[type=submit]").click();
     await p.waitForSelector("#dialog", { state: "hidden" });
+    await p.locator("#libraryBtn").click();
     await p.locator("#logoutBtn").click();
     await p.waitForSelector("#login:not([hidden])");
     await p.locator("#password").fill("new-password-789");

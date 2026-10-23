@@ -1,3 +1,4 @@
+import { showEditorControl } from './editor-ui-helpers.js';
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -173,8 +174,8 @@ test("zoom changes only viewport size and drag stays in document coordinates at 
 }));
 
 test("aspect checkbox links numeric width and height and unsupported transforms explain missing handles", () => fixture(async ({ page, frame, target }) => {
-  await target.click(); await page.locator("#lockAspect").check();
-  await page.locator("#wValue").fill("600"); await page.locator("#wValue").dispatchEvent("change");
+  await target.click(); await showEditorControl(page, 'lockAspect'); await page.locator("#lockAspect").check();
+  await showEditorControl(page, 'wValue'); await page.locator("#wValue").fill("600"); await page.locator("#wValue").dispatchEvent("change");
   await waitStyle(page, "height", "300px");
   near((await geometry(target)).h, 300);
   await target.evaluate(e => { e.style.transform = "skewX(20deg)"; });
@@ -197,8 +198,8 @@ test("selected handles follow zoom without reselecting the object", () => fixtur
 
 test("numeric aspect lock preserves the same outer ratio as handles for padded objects", () => fixture(async ({ page, frame }) => {
   const target = frame.locator('[data-sd-slide="s0"] h1');
-  await target.click(); await page.locator("#lockAspect").check();
-  await page.locator("#wValue").fill("600"); await page.locator("#wValue").dispatchEvent("change");
+  await target.click(); await showEditorControl(page, 'lockAspect'); await page.locator("#lockAspect").check();
+  await showEditorControl(page, 'wValue'); await page.locator("#wValue").fill("600"); await page.locator("#wValue").dispatchEvent("change");
   await page.waitForFunction(() => document.querySelector("#hValue").value !== "100");
   const g = await geometry(target);
   near((g.w + 50) / (g.h + 50), 350 / 150, .001);

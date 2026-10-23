@@ -599,7 +599,7 @@ export async function startStudio(opts = {}) {
         return;
       }
       const p = url.pathname === "/" ? "index.html" : url.pathname.slice(1);
-      if (!["index.html", "help.html", "style.css", "app.js", "workflow-ui.js", "feedback-ui.js", "editor-navigation.js", "upload-ui.js", "upload-check.js", "time.js", "ai-connection.js", "presenter.js", "presenter.html", "presenter.css", "preflight-ui.js", "authoring-ui.js", "slide-ui.js", "slide-model.js", "data-ui.js", "data-grid.css", "ribbon-ui.js", "link-ui.js", "data-model.js", "jszip.min.js", "text-model.js", "object-model.js"].includes(p)) {
+      if (!["index.html", "help.html", "style.css", "app.js", "workflow-ui.js", "feedback-ui.js", "editor-navigation.js", "editor-shell.js", "editor-shell.css", "editor-icons.js", "editor-geist.woff2", "vendor-notices.txt", "upload-ui.js", "upload-check.js", "time.js", "ai-connection.js", "presenter.js", "presenter.html", "presenter.css", "preflight-ui.js", "authoring-ui.js", "slide-ui.js", "slide-model.js", "data-ui.js", "data-grid.css", "ribbon-ui.js", "link-ui.js", "data-model.js", "jszip.min.js", "text-model.js", "object-model.js"].includes(p)) {
         send(res, 404, { error: "페이지를 찾을 수 없습니다." });
         return;
       }
@@ -607,7 +607,7 @@ export async function startStudio(opts = {}) {
         p === "jszip.min.js"
           ? join(base, "node_modules/jszip/dist/jszip.min.js")
           : join(base, "public", p);
-      send(res, 200, await readFile(file), types[extname(p)]);
+      send(res, 200, await readFile(file), p === "vendor-notices.txt" ? "text/plain; charset=utf-8" : types[extname(p)]);
     }),
   );
   const content = http.createServer(

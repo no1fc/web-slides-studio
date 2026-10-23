@@ -41,7 +41,7 @@
     slides[current]?.getBoundingClientRect().width / 1920 || 1;
   const style = document.createElement("style");
   style.textContent = edit
-    ? "[data-sd-id]{cursor:move}.sd-selected{outline:3px solid #4cddc9!important;outline-offset:5px}#hud,#help,#progress{display:none!important}[contenteditable=true]{cursor:text}.sd-selected img{pointer-events:none}"
+    ? "[data-sd-id]{cursor:move}.sd-selected{outline:3px solid #93c5fd!important;outline-offset:5px}#hud,#help,#progress{display:none!important}[contenteditable=true]{cursor:text}.sd-selected img{pointer-events:none}"
     : "";
   document.head.append(style);
   if (!edit) {
@@ -79,12 +79,12 @@
   if (edit) {
     style.textContent += `
       html,body{overflow:hidden!important}
-      #sd-selection-overlay{position:fixed;box-sizing:border-box;border:1px solid #159b88;pointer-events:none;z-index:2147483647;transform-origin:center}
+      #sd-selection-overlay{position:fixed;box-sizing:border-box;border:1px solid #2563eb;pointer-events:none;z-index:2147483647;transform-origin:center}
       #sd-selection-overlay[hidden]{display:none!important}
-      #sd-selection-overlay button{position:absolute;display:block;box-sizing:border-box;width:12px;height:12px;min-width:0;min-height:0;margin:0;padding:0;background:#fff;border:2px solid #159b88;border-radius:2px;transform:translate(-50%,-50%);pointer-events:auto;touch-action:none}
-      #sd-selection-overlay button[data-sd-handle=rotate]{border-radius:50%;background:#4cddc9;cursor:grab}
+      #sd-selection-overlay button{position:absolute;display:block;box-sizing:border-box;width:12px;height:12px;min-width:0;min-height:0;margin:0;padding:0;background:#fff;border:2px solid #2563eb;border-radius:2px;transform:translate(-50%,-50%);pointer-events:auto;touch-action:none}
+      #sd-selection-overlay button[data-sd-handle=rotate]{border-radius:50%;background:#93c5fd;cursor:grab}
       [data-sd-id]{touch-action:none}[contenteditable=true]{touch-action:auto}
-      #sd-marquee{position:fixed;border:1px solid #159b88;background:#4cddc925;pointer-events:none;z-index:2147483646}
+      #sd-marquee{position:fixed;border:1px solid #2563eb;background:#93c5fd25;pointer-events:none;z-index:2147483646}
       #sd-marquee[hidden]{display:none!important}
     `;
     overlay = document.createElement("div");
