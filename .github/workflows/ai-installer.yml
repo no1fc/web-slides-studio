@@ -1,25 +1,29 @@
-name: AI installer
+name: AI integration
 on:
   push:
     paths:
       - scripts/install-ai.mjs
       - test/ai-installer.test.js
-      - integrations/mcp/test/installer.test.js
-      - integrations/mcp/package.json
-      - integrations/mcp/package-lock.json
+      - integrations/mcp/**
+      - src/**
+      - public/**
+      - package.json
+      - package-lock.json
       - .github/workflows/ai-installer.yml
   pull_request:
     paths:
       - scripts/install-ai.mjs
       - test/ai-installer.test.js
-      - integrations/mcp/test/installer.test.js
-      - integrations/mcp/package.json
-      - integrations/mcp/package-lock.json
+      - integrations/mcp/**
+      - src/**
+      - public/**
+      - package.json
+      - package-lock.json
       - .github/workflows/ai-installer.yml
 permissions:
   contents: read
 jobs:
-  installer:
+  integration:
     strategy:
       fail-fast: false
       matrix:
@@ -32,5 +36,7 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: integrations/mcp/package-lock.json
+      - run: npm ci --ignore-scripts
       - run: npm ci --prefix integrations/mcp --ignore-scripts
-      - run: node --test test/ai-installer.test.js integrations/mcp/test/installer.test.js
+      - run: node --test test/ai-installer.test.js
+      - run: npm run test:mcp

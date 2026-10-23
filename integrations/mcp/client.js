@@ -21,7 +21,8 @@ export function studioOrigin(raw = 'http://127.0.0.1:4310') {
 }
 
 async function boundedFile(path, limit, noFollow = false) {
-  const handle = await open(path, constants.O_RDONLY | constants.O_NONBLOCK | (noFollow ? constants.O_NOFOLLOW : 0));
+  const flags = constants.O_RDONLY | constants.O_NONBLOCK | (noFollow ? constants.O_NOFOLLOW : 0);
+  const handle = await open(path, flags);
   try {
     const stat = await handle.stat();
     if (!stat.isFile() || stat.size > limit) fail('file_rejected', 'The file must be a regular file within the size limit.');
@@ -35,7 +36,18 @@ async function boundedFile(path, limit, noFollow = false) {
     const after = await handle.stat();
     if (offset > limit || after.size !== stat.size || after.mtimeMs !== stat.mtimeMs)
       fail('file_rejected', 'The file changed while being read or exceeded its size limit.');
-    return { bytes: buffer.subarray(0, offset), stat };
+    if (noFollow) {
+      // Windows path stats and handle stats may report different device IDs.
+      // Keep the original handle open and compare identity using two handles.
+      const check = await open(path, flags);
+      try {
+        const current = await check.stat();
+        if (current.dev !== stat.dev || current.ino !== stat.ino ||
+            current.size !== after.size || current.mtimeMs !== after.mtimeMs)
+          fail('file_rejected', 'The ZIP path changed while being read.');
+      } finally { await check.close(); }
+    }
+    return { bytes: buffer.subarray(0, offset) };
   } finally { await handle.close(); }
 }
 
@@ -51,16 +63,17 @@ export async function readBundle(workspace, input) {
     const requested = resolve(root, input);
     if (!inside(root, requested) || extname(requested).toLowerCase() !== '.zip')
       fail('file_rejected', 'Choose a ZIP file inside SLIDES_STUDIO_WORKSPACE.');
-    let current = root;
+    let current = root, before;
     for (const part of relative(root, requested).split(sep)) {
       current = resolve(current, part);
-      if ((await lstat(current)).isSymbolicLink()) fail('file_rejected', 'ZIP paths must not contain symbolic links.');
+      before = await lstat(current);
+      if (before.isSymbolicLink()) fail('file_rejected', 'ZIP paths must not contain symbolic links.');
     }
     const actual = await realpath(requested);
     if (!inside(root, actual) || actual !== requested) fail('file_rejected', 'ZIP paths must stay inside SLIDES_STUDIO_WORKSPACE.');
-    const { bytes, stat } = await boundedFile(actual, ZIP_LIMIT, true);
+    const { bytes } = await boundedFile(actual, ZIP_LIMIT, true);
     const after = await lstat(requested);
-    if (await realpath(requested) !== actual || after.dev !== stat.dev || after.ino !== stat.ino || after.isSymbolicLink())
+    if (await realpath(requested) !== actual || after.dev !== before.dev || after.ino !== before.ino || !after.isFile() || after.isSymbolicLink())
       fail('file_rejected', 'The ZIP path changed while being read.');
     return bytes;
   } catch (error) {

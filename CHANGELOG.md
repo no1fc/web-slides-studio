@@ -1,5 +1,10 @@
 # 변경 이력
 
+## 2026-10-23 — Windows MCP ZIP 가져오기 수정
+
+- Windows에서 경로 lstat과 열린 파일의 stat 장치 번호가 달라 정상 ZIP을 거부하던 문제 수정. 경로 정보는 읽기 전후끼리, 파일 식별 정보는 원본과 재확인 핸들끼리 비교.
+- 작업 폴더 경계·심볼릭 링크·크기 제한과 파일 교체 거부를 유지. Windows/Linux CI를 설치뿐 아니라 인증·편집·실제 ZIP 가져오기까지 확장.
+
 ## 2026-10-23 — Windows AI 연결 설치 수정
 
 - Windows의 `claude.cmd`·`codex.cmd`를 발견하지 못하던 설치기 실행 경로 수정. MCP 의존성의 cross-spawn을 명시적으로 사용해 PATH/PATHEXT와 인자를 처리.
