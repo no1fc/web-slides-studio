@@ -6,7 +6,7 @@
   "description": "Local stdio MCP adapter for Slides Studio's authenticated HTTP API",
   "scripts": {
     "start": "node server.js",
-    "test": "node --test test/*.test.js"
+    "test": "node --test"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.1",
