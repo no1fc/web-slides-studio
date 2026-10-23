@@ -1,7 +1,7 @@
 (function (global) {
   "use strict";
 
-  const characterKeys = ["fontFamily", "fontTheme", "fontSize", "color", "colorTheme", "bold", "italic", "underline"];
+  const characterKeys = ["fontFamily", "fontTheme", "fontSize", "fontWeight", "letterSpacing", "color", "colorTheme", "bold", "italic", "underline"];
   const paragraphKeys = ["align", "lineHeight", "spaceAfter", "indent", "list"];
   const finite = (value, min, max) => typeof value === "number" && Number.isFinite(value) && value >= min && value <= max;
 
@@ -40,15 +40,18 @@
       if (key === "fontTheme" && !["heading", "body"].includes(item)) throw new Error("테마 글꼴 값 오류");
       if (key === "colorTheme" && !["text", "accent"].includes(item)) throw new Error("테마 색상 값 오류");
       if (key === "fontSize" && !finite(item, 6, 400)) throw new Error("글꼴 크기 오류");
+      if (key === "fontWeight" && (!Number.isInteger(item) || !finite(item, 300, 800))) throw new Error("글꼴 굵기 오류");
+      if (key === "letterSpacing" && !finite(item, -20, 50)) throw new Error("자간 값 오류");
       if (key === "color" && (typeof item !== "string" || !/^#[\da-f]{6}$/i.test(item))) throw new Error("색상 값 오류");
       if (["bold", "italic", "underline"].includes(key) && typeof item !== "boolean") throw new Error("문자 서식 값 오류");
       if (key === "align" && !["left", "center", "right", "justify"].includes(item)) throw new Error("문단 정렬 값 오류");
-      if (key === "lineHeight" && !finite(item, 0.5, 4)) throw new Error("줄간격 값 오류");
+      if (key === "lineHeight" && !finite(item, 0.5, 5)) throw new Error("줄간격 값 오류");
       if (key === "spaceAfter" && !finite(item, 0, 200)) throw new Error("문단 간격 값 오류");
       if (key === "indent" && (!Number.isInteger(item) || !finite(item, 0, 8))) throw new Error("들여쓰기 값 오류");
       if (key === "list" && !["none", "bullet", "number"].includes(item)) throw new Error("목록 값 오류");
       result[key] = key === "color" ? item.toLowerCase() : item;
     }
+    if (result.fontWeight !== undefined) result.bold = result.fontWeight >= 600;
     return result;
   }
 
@@ -60,6 +63,9 @@
 
   function patchRun(run, patch) {
     const result = { ...run, ...patch };
+    // An explicit bold toggle restores the standard 400/700 weights. Numeric
+    // weight takes precedence when both arrive in an imported style.
+    if (Object.hasOwn(patch, "bold") && !Object.hasOwn(patch, "fontWeight")) delete result.fontWeight;
     for (const [absolute, token] of [["fontFamily", "fontTheme"], ["color", "colorTheme"]]) {
       if (Object.hasOwn(patch, absolute)) delete result[token];
       if (Object.hasOwn(patch, token)) delete result[absolute];
@@ -199,10 +205,32 @@
     return underlined;
   }
 
+  function resolveThemeFontSizes(element, rich) {
+    const resolved = normalizeRichText(rich);
+    let sizes;
+    try { sizes = JSON.parse(element.getAttribute("data-sd-theme-sizes") || "null"); } catch { return resolved; }
+    if (!sizes || typeof sizes !== "object") return resolved;
+    for (const paragraph of resolved.paragraphs) for (const run of paragraph.runs) {
+      if (["heading", "body"].includes(run.fontTheme) && finite(sizes[run.fontTheme], 6, 400)) run.fontSize = sizes[run.fontTheme];
+    }
+    return resolved;
+  }
+
   function renderRichText(element, rich, textBox) {
     // Omitting rich updates box layout without replacing existing legacy markup.
     if (rich !== undefined) {
-      const normalized = normalizeRichText(rich), document = element.ownerDocument;
+      let normalized = normalizeRichText(rich), original = normalized;
+      const document = element.ownerDocument;
+      if (element.hasAttribute("data-sd-theme-sizes") && element.hasAttribute("data-sd-rich-text")) {
+        try {
+          const previous = normalizeRichText(JSON.parse(element.getAttribute("data-sd-rich-text")));
+          // Entering/leaving text editing must not commit a theme preview's size.
+          // A real text/style edit instead adopts the displayed logical sizes.
+          if (JSON.stringify(normalized) === JSON.stringify(resolveThemeFontSizes(element, previous))) original = previous;
+          else if (JSON.stringify(normalized) !== JSON.stringify(previous)) element.removeAttribute("data-sd-theme-sizes");
+        } catch { element.removeAttribute("data-sd-theme-sizes"); }
+      }
+      normalized = resolveThemeFontSizes(element, normalized);
       const defaultUnderline = underlineDefault(element, normalized);
       const content = document.createElement("span");
       content.setAttribute("data-sd-text-content", "");
@@ -254,7 +282,9 @@
             span.setAttribute("data-sd-color-theme", run.colorTheme);
             span.style.color = span.style.webkitTextFillColor = `var(--sd-theme-${run.colorTheme})`;
           }
-          if (run.bold !== undefined) span.style.fontWeight = run.bold ? "700" : "400";
+          if (run.fontWeight !== undefined) { span.style.fontWeight = String(run.fontWeight); span.setAttribute("data-sd-font-weight", String(run.fontWeight)); }
+          else if (run.bold !== undefined) span.style.fontWeight = run.bold ? "700" : "400";
+          if (run.letterSpacing !== undefined) span.style.letterSpacing = run.letterSpacing + "px";
           if (run.italic !== undefined) span.style.fontStyle = run.italic ? "italic" : "normal";
           if (run.underline !== undefined) span.style.textDecoration = run.underline ? "underline" : "none";
           else if (defaultUnderline) span.style.textDecoration = "underline";
@@ -266,11 +296,11 @@
       }
       element.replaceChildren(content);
       element.setAttribute("data-sd-rich", "true");
-      element.setAttribute("data-sd-rich-text", JSON.stringify(normalized));
+      element.setAttribute("data-sd-rich-text", JSON.stringify(original));
     }
     if (textBox !== undefined) applyBox(element, textBox);
     return element;
   }
 
-  global.SDText = Object.freeze({ normalizeRichText, normalizeTextBox, plainText, formatRichText, renderRichText });
+  global.SDText = Object.freeze({ normalizeRichText, normalizeTextBox, plainText, formatRichText, renderRichText, resolveThemeFontSizes });
 })(globalThis);

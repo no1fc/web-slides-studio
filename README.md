@@ -216,3 +216,5 @@ npm run test:mcp
 REA로 open-slide의 편집·출력 구조를 분석하고 기존 저장·공유 구조에 맞춰 적용했습니다. 세 기본 템플릿의 구성을 개선하고, 비공개 개체/슬라이드 수정 요청을 기존 AI 변경안 비교에 연결했습니다(MCP 0.4.0 이상). PPTX는 웹·내부 링크와 사용 가능한 대체 글꼴을 보존하며 정적 출력의 지연 애니메이션 누락을 줄입니다. [분석 근거와 적용 범위](docs/OPEN_SLIDE_COMPARISON.md), [사용법과 제한](docs/USER_GUIDE.md#도구-찾기와-ai-수정-요청)을 확인하세요.
 
 편집 화면의 실제 참조 실행과 배치 근거는 [UI 비교 기록](docs/OPEN_SLIDE_UI.md)에 정리했습니다. UI용 Geist 글꼴과 Lucide 아이콘은 로컬 제공하며 [라이선스](public/vendor-notices.txt)를 포함합니다.
+
+open-slide의 서식·배치·자산·디자인 패널도 비교하여 빠진 도구를 추가했습니다. [패널별 적용·차이](docs/OPEN_SLIDE_PANELS.md)와 [보관함·디자인 사용법](docs/USER_GUIDE.md#보관함배치전체-디자인)을 확인하세요. 노트를 포함해 게시한 공유본에서는 **발표자 노트 보기**로 내용을 읽을 수 있습니다.

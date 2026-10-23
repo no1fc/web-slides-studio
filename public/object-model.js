@@ -94,7 +94,7 @@
       if (key === "textMetricsScale" && (!finite(v, .01, 100) || value.kind !== "text")) throw new Error("텍스트 간격 배율 오류");
       if (key === "inheritFontSize" && (typeof v !== "boolean" || value.kind !== "text" || v && !own(value, "fontSize"))) throw new Error("그룹화 전에 상속한 글꼴 크기를 확인해 주세요.");
       if (key === "text" && (typeof v !== "string" || v.length > (value.richText ? 100000 : 20000))) throw new Error("텍스트가 너무 깁니다.");
-      result[key] = ["color", "fill"].includes(key) ? color(v) : key === "richText" ? global.SDText.normalizeRichText(v) : key === "textBox" ? global.SDText.normalizeTextBox(v) : v;
+      result[key] = ["color", "fill"].includes(key) ? color(v,key === "fill") : key === "richText" ? global.SDText.normalizeRichText(v) : key === "textBox" ? global.SDText.normalizeTextBox(v) : v;
     }
     if (own(value, "image") && value.kind !== "image" || own(value, "shape") && value.kind !== "shape" || own(value, "group") && value.kind !== "group") throw new Error("개체 종류와 편집 속성이 다릅니다.");
     if (value.kind === "shape" && ["text", "richText", "textBox"].some(key => own(value, key))) throw new Error("도형 라벨은 텍스트 상자를 추가해 사용해 주세요.");
@@ -148,6 +148,7 @@
         if (next.richText) for (const p of next.richText.paragraphs) {
           if (p.spaceAfter !== undefined) p.spaceAfter = round(p.spaceAfter * scale);
           for (const r of p.runs) if (r.fontSize !== undefined) r.fontSize = round(r.fontSize * scale);
+          for (const r of p.runs) if (r.letterSpacing !== undefined) r.letterSpacing = round(r.letterSpacing * scale);
         }
       }
       if (next.kind === "shape") next.shape.strokeWidth = round(next.shape.strokeWidth * scale);
@@ -162,7 +163,7 @@
     if (object.rotate !== undefined) element.style.setProperty("rotate", object.rotate + "deg");
     if (object.fontSize !== undefined || object.kind === "text" && !object.inheritFontSize) element.style.fontSize = (object.fontSize ?? 48) + "px";
     if (object.color) { element.style.color = object.color; element.style.webkitTextFillColor = object.color; }
-    if (object.fill && object.kind !== "shape") element.style.background = object.fill;
+    if (object.fill && object.kind !== "shape") element.style.background = object.fill === "none" ? "transparent" : object.fill;
     if (object.hidden) element.style.display = "none";
   }
   function createElement(document, object) {

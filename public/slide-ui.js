@@ -288,7 +288,7 @@
     const error = el("p", "", "authoring-error"); error.setAttribute("role", "alert"); body.append(error);
     formCommand(body, "테마 적용", "applyThemeBtn", error, async () => {
       const candidate = clone(state);
-      candidate.theme = SDSlides.normalizeTheme({ colors: Object.fromEntries(["background", "text", "accent"].map(key => [key, controls[key].value])), fonts: Object.fromEntries(["heading", "body"].map(key => [key, controls[key].value])) });
+      candidate.theme = SDSlides.normalizeTheme({ ...state.theme, colors: Object.fromEntries(["background", "text", "accent"].map(key => [key, controls[key].value])), fonts: Object.fromEntries(["heading", "body"].map(key => [key, controls[key].value])) });
       await commit(candidate);
     });
   }, "테마 준비 중…");

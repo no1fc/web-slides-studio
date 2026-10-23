@@ -362,7 +362,11 @@ function properties() {
     ["rotateValue", "rotate"],
     ["fillValue", "fill"],
   ])
-    propertyValue(id, s[key] ?? 0);
+    propertyValue(id, key === "fill" && s.fill === "none" ? "#ffffff" : s[key] ?? 0);
+  if ($("clearObjectFillBtn")) {
+    $("clearObjectFillBtn").textContent = s.fill === "none" ? "채우기 없음 · 투명" : "배경 채우기 없음";
+    $("clearObjectFillBtn").disabled = objectLocked(s.id) || nativeAdded(s.id)?.kind === "group";
+  }
 }
 function nativeAdded(id) {
   return state?.added.find(a => a.id === id && a.slide === state.order[index] && ["text", "image", "shape", "group", "table", "chart"].includes(a.kind));
@@ -439,6 +443,7 @@ function textProperties() {
   const style = s.textStyle || {}, box = s.textBox || {};
   for (const [id, value] of [
     ["fontFamilyValue", style.fontFamily ?? ""], ["fontValue", style.fontSize ?? s.fontSize ?? ""],
+    ["fontWeightValue", style.fontWeight ?? (style.bold ? 700 : 400)], ["letterSpacingValue", style.letterSpacing ?? 0],
     ["colorValue", style.color ?? s.color ?? "#000000"], ["textAlignValue", style.align ?? "left"],
     ["lineHeightValue", style.lineHeight ?? 1.2], ["spaceAfterValue", style.spaceAfter ?? 0],
     ["listStyleValue", style.list ?? "none"], ["verticalAlignValue", box.vertical ?? "top"],
@@ -506,7 +511,7 @@ function arrangementTools() {
   const layerable = editable && layers.every(item => item?.layerable) && new Set(layers.map(item => item?.group)).size === 1;
   $("selectionCount").textContent = count ? `${count}개 선택` : "선택 없음";
   for (const [id, name] of Object.entries(arrangementCommands)) {
-    const enabled = name.startsWith("align-") ? precise && count >= 2
+    const enabled = name.startsWith("align-") ? precise && count >= 1
       : name.startsWith("distribute-") ? precise && count >= 3
       : ["front", "forward", "backward", "back"].includes(name) ? layerable
       : name === "group" ? precise && count >= 2 && layerable && selectedElements.every(item => nativeAdded(item.id) && item.groupable !== false)
@@ -515,6 +520,7 @@ function arrangementTools() {
     $(id).disabled = unavailable || !enabled;
   }
   $("pasteObjectsBtn").disabled = unavailable || !objectClipboard || objectClipboard.deckId !== deck?.id;
+  window.SDArrangeUI?.update();
 }
 function renderLayers() {
   const list = $("layerList");
@@ -1049,7 +1055,8 @@ for (const [id, key] of [
     else toast("입력 범위를 확인해 주세요.");
   };
 for (const [id, scope, key] of [
-  ["fontValue", "character", "fontSize"], ["lineHeightValue", "paragraph", "lineHeight"],
+  ["fontValue", "character", "fontSize"], ["fontWeightValue", "character", "fontWeight"],
+  ["letterSpacingValue", "character", "letterSpacing"], ["lineHeightValue", "paragraph", "lineHeight"],
   ["spaceAfterValue", "paragraph", "spaceAfter"],
 ]) $(id).onchange = () => {
   if (!editableText()) return;

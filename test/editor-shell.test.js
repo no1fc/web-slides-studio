@@ -104,6 +104,8 @@ test('format panel toggle returns canvas space and exposes keyboard reachable ob
     assert.equal(await page.locator('#inspector-arrange-tab').getAttribute('aria-selected'), 'true');
     assert.equal(await page.locator('#xValue').isVisible(), true);
     await page.keyboard.press('End');
+    assert.equal(await page.locator('#inspector-design-tab').getAttribute('aria-selected'), 'true');
+    await page.keyboard.press('ArrowLeft');
     assert.equal(await page.locator('#inspector-layers-tab').getAttribute('aria-selected'), 'true');
     assert.equal(await page.locator('#layerList').isVisible(), true);
     await page.keyboard.press('Home');

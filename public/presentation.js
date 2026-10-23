@@ -31,6 +31,8 @@
       const style = document.createElement('style');
       style.textContent = `
         #hud,#help,#progress,#notes,.notes{display:none!important}
+        #sd-shared-notes:not([hidden]){display:block!important}
+        #sd-shared-notes[hidden]{display:none!important}
         #sd-presentation-controls{position:fixed!important;inset:auto 0 0!important;height:56px!important;display:flex!important;align-items:center!important;justify-content:center!important;gap:12px!important;background:#17202a!important;color:white!important;z-index:2147483647!important;font:16px system-ui!important;transform:none!important}
         #sd-presentation-controls button{position:static!important;width:auto!important;height:36px!important;margin:0!important;padding:0 14px!important;border:1px solid #8b98a5!important;border-radius:6px!important;background:#273746!important;color:white!important;font:inherit!important;cursor:pointer!important}
         #sd-presentation-controls button:disabled{opacity:.45!important;cursor:default!important}
@@ -58,6 +60,22 @@
       }
       document.body.append(controls);
       if (audience) controls.style.setProperty('display', 'none', 'important');
+      let notesPanel, notesText, notesButton;
+      if (!audience && !config.audience && config.sharedNotes === true) {
+        notesPanel = document.createElement('aside'); notesPanel.id = 'sd-shared-notes'; notesPanel.hidden = true;
+        notesPanel.setAttribute('aria-label', '공유된 발표자 노트'); notesPanel.tabIndex = 0;
+        notesPanel.style.cssText = 'position:fixed;left:0;right:0;bottom:56px;height:min(30vh,220px);box-sizing:border-box;overflow:auto;background:#fff;color:#172033;padding:16px 24px;z-index:2147483645;font:16px/1.6 system-ui;text-align:left;transform:none';
+        notesText = document.createElement('div'); notesText.style.whiteSpace = 'pre-wrap'; notesPanel.append(notesText);
+        document.body.append(notesPanel);
+        notesButton = document.createElement('button'); notesButton.type = 'button'; notesButton.textContent = '발표자 노트 보기';
+        notesButton.setAttribute('aria-controls', notesPanel.id); notesButton.setAttribute('aria-expanded', 'false'); controls.append(notesButton);
+        notesButton.addEventListener('click', () => {
+          notesPanel.hidden = !notesPanel.hidden;
+          notesButton.setAttribute('aria-expanded', String(!notesPanel.hidden));
+          notesButton.textContent = notesPanel.hidden ? '발표자 노트 보기' : '발표자 노트 닫기'; fit();
+        });
+        notesPanel.addEventListener('click', event => event.stopPropagation());
+      }
       const curtain = document.createElement('div'), pointer = document.createElement('div');
       curtain.id = 'sd-black-screen'; pointer.id = 'sd-laser-pointer';
       curtain.style.cssText = 'position:fixed;inset:0;background:#000;z-index:2147483646;pointer-events:none;display:none';
@@ -94,7 +112,7 @@
       // Prevent legacy click-to-advance handlers from also handling our buttons.
       controls.addEventListener('click', event => event.stopPropagation());
       const fit = () => {
-        const available = Math.max(1, innerHeight - (clean || audience ? 0 : 56));
+        const available = Math.max(1, innerHeight - (clean || audience ? 0 : 56) - (notesPanel && !notesPanel.hidden ? notesPanel.offsetHeight : 0));
         const scale = Math.min(innerWidth / 1920, available / 1080);
         set(stage, {left:`${(innerWidth - 1920 * scale) / 2}px`, top:`${(available - 1080 * scale) / 2}px`, transform:`scale(${scale})`});
       };
@@ -102,6 +120,10 @@
       navigate = event => {
         if (clean || event.defaultPrevented || event.isComposing || event.ctrlKey || event.metaKey || event.altKey) return;
         const key = event.key;
+        if (notesPanel?.contains(event.target)) {
+          if (key === 'Escape') { notesPanel.hidden = true; notesButton.setAttribute('aria-expanded','false'); notesButton.textContent='발표자 노트 보기'; notesButton.focus(); fit(); }
+          event.stopImmediatePropagation(); return;
+        }
         if (key === 'Escape') { notify({type:'present-escape'}); return; }
         if (['b','B','l','L'].includes(key) && !(event.target instanceof Element && (event.target.isContentEditable || event.target.closest('input,textarea,select,button,a,[role="link"]')))) {
           event.preventDefault(); event.stopImmediatePropagation();
@@ -136,13 +158,14 @@
           });
           previous.disabled = index === 0; next.disabled = index === slides.length - 1;
           count.textContent = `${index + 1} / ${slides.length}`;
+          if (notesText) notesText.textContent = slides[index]?.querySelector('.notes')?.textContent || '이 슬라이드에는 노트가 없습니다.';
           fit();
         },
         command(data) {
           if (data.type === 'present-go' && Number.isInteger(data.index)) go(data.index);
           if (data.type === 'present-state') state(data, false);
         },
-        clean() { clean = true; controls.remove(); curtain.remove(); pointer.remove(); fit(); },
+        clean() { clean = true; controls.remove(); notesPanel?.remove(); notesPanel = null; curtain.remove(); pointer.remove(); fit(); },
       };
     },
   };

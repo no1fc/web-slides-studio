@@ -15,6 +15,8 @@
     drag = null,
     nudge = null,
     lockAspect = false,
+    alignToSlide = false,
+    snapping = true,
     textEdit = null,
     composing = false;
   const patches = config.state?.patches || {};
@@ -75,7 +77,7 @@
   const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
   const round = (v) => Math.round(v * 100) / 100;
   const handles = { nw: [-1, -1], n: [0, -1], ne: [1, -1], e: [1, 0], se: [1, 1], s: [0, 1], sw: [-1, 1], w: [-1, 0], rotate: [0, -1] };
-  let overlay, marquee;
+  let overlay, marquee, snapGuides;
   if (edit) {
     style.textContent += `
       html,body{overflow:hidden!important}
@@ -106,6 +108,11 @@
     marquee.id = "sd-marquee";
     marquee.hidden = true;
     document.body.append(marquee);
+    snapGuides = document.createElement("div");
+    snapGuides.id = "sd-snap-guides";
+    snapGuides.setAttribute("aria-hidden", "true");
+    snapGuides.style.cssText = "position:fixed;inset:0;pointer-events:none;z-index:2147483646";
+    document.body.append(snapGuides);
   }
   function geometry(e) {
     const c = getComputedStyle(e), r = e.getBoundingClientRect();
@@ -222,6 +229,7 @@
     }
     return {
         id: e.dataset.sdId,
+        parentId: selectableParent(e)?.dataset.sdId || null,
         tag: p.kind === "image" ? "img" : e.tagName.toLowerCase(),
         kind: p.kind || (e.tagName === "IMG" ? "image" : "html"),
         link: p.link ?? null,
@@ -242,9 +250,13 @@
         locked: locked(e),
         fontSize: p.fontSize || parseFloat(c.fontSize),
         color: hex(c.color),
-        fill: hex(c.backgroundColor),
+        fill: c.backgroundColor === "transparent" || /rgba\([^)]*,\s*0\)$/.test(c.backgroundColor) ? "none" : hex(c.backgroundColor),
         ...textInfo,
       };
+  }
+  function selectableParent(element) {
+    const parent = element.parentElement?.closest("[data-sd-id]");
+    return parent && parent !== slides[current] && slides[current]?.contains(parent) && visible(parent) && !locked(parent) ? parent : null;
   }
   function report() {
     updateOverlay();
@@ -292,7 +304,7 @@
       e.style.color = p.color;
       e.style.webkitTextFillColor = p.color;
     }
-    if (p.fill) e.style.background = p.fill;
+    if (p.fill) e.style.background = p.fill === "none" ? "transparent" : p.fill;
     if (p.z !== undefined) e.style.zIndex = String(p.z);
     if (p.layerPosition === "relative") {
       e.style.position = "relative";
@@ -382,6 +394,7 @@
     }
   }
   function finishDrag(commit) {
+    snapGuides?.replaceChildren();
     if (!drag) return;
     const d = drag;
     drag = null;
@@ -470,6 +483,33 @@
     for (const item of items) patch(item.id, { x: round(item.x + dx), y: round(item.y + dy) });
     updateOverlay();
   }
+  function snappedMovement(d, dx, dy, bypass) {
+    snapGuides.replaceChildren();
+    if (!snapping || bypass || d.geometry.reason || !d.snapBounds) return { dx, dy };
+    const stage = slides[current].getBoundingClientRect(), start = d.snapBounds;
+    const other = editableElements().filter(el => visible(el) && !selection.some(chosen => chosen === el || chosen.contains(el) || el.contains(chosen)));
+    const targets = [stage, ...other.map(el => el.getBoundingClientRect())];
+    const adjusted = { dx, dy };
+    for (const [axis, near, far] of [["x", "left", "right"], ["y", "top", "bottom"]]) {
+      const delta = (axis === "x" ? dx : dy) * d.scale;
+      const moving = [start[near], (start[near] + start[far]) / 2, start[far]].map(value => value + delta);
+      let best = null;
+      for (const target of targets) for (const value of [target[near], (target[near] + target[far]) / 2, target[far]]) for (const edge of moving) {
+        const distance = value - edge;
+        if (Math.abs(distance) <= 5 && (!best || Math.abs(distance) < Math.abs(best.distance))) best = { distance, value };
+      }
+      if (!best) continue;
+      adjusted[axis === "x" ? "dx" : "dy"] += best.distance / d.scale;
+      const guide = document.createElement("div");
+      guide.dataset.axis = axis;
+      guide.style.cssText = "position:absolute;background:#e85535;pointer-events:none";
+      Object.assign(guide.style, axis === "x"
+        ? { left: `${best.value}px`, top: `${stage.top}px`, width: "1px", height: `${stage.height}px` }
+        : { left: `${stage.left}px`, top: `${best.value}px`, width: `${stage.width}px`, height: "1px" });
+      snapGuides.append(guide);
+    }
+    return adjusted;
+  }
   function transformDrag(e) {
     const d = drag, g = d.geometry, ss = d.scale;
     if (d.kind === "marquee") {
@@ -478,11 +518,12 @@
       marquee.hidden = false;
       return;
     }
-    const dx = (e.clientX - d.startX) / ss, dy = (e.clientY - d.startY) / ss;
+    let dx = (e.clientX - d.startX) / ss, dy = (e.clientY - d.startY) / ss;
     d.dx = dx; d.dy = dy;
-    if (d.items) { moveItems(d.items, Math.round(dx), Math.round(dy)); return; }
+    if (d.kind === "move") ({ dx, dy } = snappedMovement(d, dx, dy, e.altKey));
+    if (d.items) { moveItems(d.items, round(dx), round(dy)); return; }
     let p;
-    if (d.kind === "move") p = { x: clamp(Math.round(d.x + dx), -5000, 5000), y: clamp(Math.round(d.y + dy), -5000, 5000) };
+    if (d.kind === "move") p = { x: clamp(round(d.x + dx), -5000, 5000), y: clamp(round(d.y + dy), -5000, 5000) };
     else {
       let cx = g.cx, cy = g.cy;
       if (d.kind === "rotate") {
@@ -555,10 +596,10 @@
     applyChanges(next.map((e, i) => ({ id: e.dataset.sdId, patch: { z: i + 1, ...(getComputedStyle(e).position === "static" ? { layerPosition: "relative" } : {}) } })));
   }
   function arrange(name) {
-    if (selection.length < (name.startsWith("distribute") ? 3 : 2)) return;
+    if (selection.length < (name.startsWith("distribute") ? 3 : 1)) return;
     if (selection.some(e => locked(e) || !visible(e) || geometry(e).reason))
       throw new Error("잠금·숨김 또는 지원하지 않는 CSS 변환 개체는 함께 정렬할 수 없습니다.");
-    const ss = scale(), b = bounds(selection);
+    const ss = scale(), b = name.startsWith("align-") && (selection.length === 1 || alignToSlide) ? slides[current].getBoundingClientRect() : bounds(selection);
     const entries = selection.map(el => ({ el, r: el.getBoundingClientRect(), p: effective(el.dataset.sdId), dx: 0, dy: 0 }));
     if (name.startsWith("align-")) for (const item of entries) {
       const r = item.r;
@@ -645,6 +686,11 @@
     try {
       if (name === "select-all") { setSelection(editableElements().filter(e => visible(e) && !locked(e))); return; }
       if (!selection.length) return;
+      if (name === "select-parent") {
+        const parent = selection.length === 1 && selectableParent(selection[0]);
+        if (parent) select(parent);
+        return;
+      }
       if (["front", "back", "forward", "backward"].includes(name)) { layerOrder(name); return; }
       if (["align-left", "align-center", "align-right", "align-top", "align-middle", "align-bottom", "distribute-x", "distribute-y"].includes(name)) { arrange(name); return; }
       if (selection.some(locked)) throw new Error("잠긴 개체는 먼저 레이어 목록에서 잠금을 해제해 주세요.");
@@ -802,6 +848,7 @@
           cssText: target.style.cssText,
           capture: handle || target,
           kind: handle?.dataset.sdHandle || "move",
+          snapBounds: bounds(selection),
           geometry: g,
           scale: scale(),
           base: { x: p.x ?? 0, y: p.y ?? 0, w: g.w, h: g.h, rotate: g.angle },
@@ -972,7 +1019,15 @@
         }
       }
     }
-    if (d.type === "settings" && typeof d.lockAspect === "boolean") lockAspect = d.lockAspect;
+    if (d.type === "settings") {
+      if (typeof d.lockAspect === "boolean") lockAspect = d.lockAspect;
+      if (typeof d.alignToSlide === "boolean") alignToSlide = d.alignToSlide;
+      if (typeof d.snapping === "boolean") { snapping = d.snapping; if (!snapping) snapGuides.replaceChildren(); }
+    }
+    if (d.type === "design-preview" && globalThis.SDSlides) {
+      try { SDSlides.applyDesignPreview(document, SDSlides.normalizeTheme(d.theme), config.state); }
+      catch (error) { tell("notice", { message: error.message }); }
+    }
     if (d.type === "commit-edit" && typeof d.requestId === "string" && d.requestId.length <= 100) {
       editRequests.add(d.requestId);
       settleEdits();

@@ -43,7 +43,7 @@ test("normalization rejects unknown, inherited, accessor and incorrectly typed t
     run({ text: "x", color: "red" }), run({ text: "x", color: ["#123456"] }),
     run({ text: "x", fontSize: "12" }), run({ text: "x", fontSize: NaN }), run({ text: "x", fontSize: 5 }), run({ text: "x", fontSize: 401 }),
     run({ text: "x", fontFamily: "Arial;background:url(x)" }), run({ text: "x", fontFamily: "<b>" }), run({ text: "x", fontFamily: "a".repeat(101) }),
-    { paragraphs: [{ runs: [], align: "start" }] }, { paragraphs: [{ runs: [], lineHeight: 4.1 }] }, { paragraphs: [{ runs: [], spaceAfter: -1 }] },
+    { paragraphs: [{ runs: [], align: "start" }] }, { paragraphs: [{ runs: [], lineHeight: 5.1 }] }, { paragraphs: [{ runs: [], spaceAfter: -1 }] },
     { paragraphs: [{ runs: [], indent: 1.5 }] }, { paragraphs: [{ runs: [], list: "decimal" }] },
   ]) assert.throws(() => normalizeRichText(value));
   for (const value of [null, [], { vertical: "center" }, { overflow: "hidden" }, { autoFit: true }, { extra: true }, Object.create({ vertical: "top" })])

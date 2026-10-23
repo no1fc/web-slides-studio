@@ -55,7 +55,7 @@
       if(deck.shareLegacyNotes)body.append(el('p','기존 링크는 이전 노트 포함 정책을 유지합니다. 노트를 제외해 다시 게시하면 같은 링크의 제공 내용이 바뀝니다.'));
       if(deck.sharePasswordProtected)body.append(el('p','접근 암호가 설정되어 있습니다. 아래를 비우면 기존 암호를 유지합니다.'));
     }
-    const notes=check(body,'발표자 노트도 공유하기 (공유받은 사람이 읽을 수 있습니다)',false);
+    const notes=check(body,'발표자 노트도 공유하기 (공유받은 사람이 읽을 수 있습니다)',!!deck.shareUrl&&(deck.shareIncludeNotes===true||deck.shareLegacyNotes===true));
     const expiration=field(body,'링크 만료일시 (한국 시간 KST)','datetime-local',deck.shareExpiresAt?SDTime.format(deck.shareExpiresAt).replace(' ','T'):'');
     const password=field(body,'접근 암호 (선택)','password');password.autocomplete='new-password';password.maxLength=128;
     const removePassword=check(body,'기존 접근 암호 해제');

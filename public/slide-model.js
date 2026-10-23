@@ -33,7 +33,7 @@
   }
 
   function normalizeTheme(value = DEFAULT_THEME) {
-    record(value, ["colors", "fonts"], "테마");
+    record(value, ["colors", "fonts", "sizes", "radius"], "테마");
     const result = structuredClone(DEFAULT_THEME);
     for (const section of ["colors", "fonts"]) {
       if (!Object.hasOwn(value, section)) continue;
@@ -56,7 +56,51 @@
         }
       }
     }
+    if (value.sizes !== undefined) {
+      record(value.sizes, ["heading", "body"], "테마 크기"); result.sizes = {};
+      for (const [key, size] of Object.entries(value.sizes)) {
+        const [min, max] = key === "heading" ? [48, 240] : [16, 72];
+        if (typeof size !== "number" || !Number.isFinite(size) || size < min || size > max) throw new Error("테마 글자 크기 범위를 확인해 주세요.");
+        result.sizes[key] = size;
+      }
+    }
+    if (value.radius !== undefined) {
+      if (typeof value.radius !== "number" || !Number.isFinite(value.radius) || value.radius < 0 || value.radius > 80) throw new Error("모서리 반경은 0~80px입니다.");
+      result.radius = value.radius;
+    }
     return result;
+  }
+
+  function applyDesignPreview(document, value, state) {
+    const theme = normalizeTheme(value);
+    for (const slide of document.querySelectorAll('[data-sd-slide]')) {
+      for (const key of ['heading','body']) slide.style.setProperty(`--sd-theme-${key}-font`,theme.fonts[key]);
+      for (const key of ['background','text','accent']) slide.style.setProperty(`--sd-theme-${key}`,theme.colors[key]);
+      for (const key of ['heading','body']) {
+        if(theme.sizes?.[key]!==undefined)slide.style.setProperty(`--sd-theme-${key}-size`,theme.sizes[key]+'px');
+        else slide.style.removeProperty(`--sd-theme-${key}-size`);
+      }
+      if(theme.radius!==undefined)slide.style.setProperty('--sd-theme-radius',theme.radius+'px');
+      else slide.style.removeProperty('--sd-theme-radius');
+      if(state.slideLayouts?.[slide.getAttribute('data-sd-slide')])slide.style.background=theme.colors.background;
+      for(const element of slide.querySelectorAll('[data-sd-font-theme],[data-sd-design]')) {
+        const role=element.getAttribute('data-sd-font-theme')||element.getAttribute('data-sd-design');
+        const property=role==='card'?'border-radius':'font-size';
+        const owner=element.closest('[data-sd-id]');
+        const patch=owner&&state.patches?.[owner.getAttribute('data-sd-id')];
+        const customized=role!=='card'&&(patch?.richText||patch?.fontSize!==undefined);
+        const size=customized?undefined:role==='card'?theme.radius:theme.sizes?.[role];
+        const saved='data-sd-design-original-'+property;
+        if(size!==undefined){if(!element.hasAttribute(saved))element.setAttribute(saved,element.style.getPropertyValue(property));element.style.setProperty(property,size+'px');}
+        else if(element.hasAttribute(saved)){const original=element.getAttribute(saved);if(original)element.style.setProperty(property,original);else element.style.removeProperty(property);element.removeAttribute(saved);}
+      }
+      for(const owner of slide.querySelectorAll('[data-sd-rich-text]')) {
+        const patch=state.patches?.[owner.getAttribute('data-sd-id')];
+        if(theme.sizes && !patch?.richText && patch?.fontSize===undefined) owner.setAttribute('data-sd-theme-sizes',JSON.stringify(theme.sizes));
+        else owner.removeAttribute('data-sd-theme-sizes');
+        global.SDTextEditor?.fit(owner);
+      }
+    }
   }
 
   function normalizeLayout(value) {
@@ -148,5 +192,5 @@
     return result;
   }
 
-  global.SDSlides = { DEFAULT_THEME, normalizeTheme, normalizeLayout, applyLayout, resetLayout };
+  global.SDSlides = { DEFAULT_THEME, normalizeTheme, normalizeLayout, applyLayout, resetLayout, applyDesignPreview };
 })(globalThis);

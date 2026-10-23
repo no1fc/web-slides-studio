@@ -12,7 +12,10 @@ const color = (value) => /^[\da-f]{6}$/i.test(String(value || "").replace(/^#/, 
   ? String(value).replace(/^#/, "").toUpperCase() : "000000";
 
 export function canExportNativeText(element) {
-  return !(element.textBox?.overflow === "clip" && element.textOverflowing);
+  // DrawingML exposes bold, not CSS numeric weights. Keep other weights in
+  // the rendered background rather than silently changing their appearance.
+  return !(element.textBox?.overflow === "clip" && element.textOverflowing) &&
+    !element.richText?.paragraphs.some(p => p.runs.some(r => r.fontWeight !== undefined && ![400, 700].includes(r.fontWeight)));
 }
 
 /** Map the displayed document pixels to a 1920px-wide, 13 1/3 inch slide. */
@@ -51,7 +54,8 @@ export function pptxText(element, objectName) {
         fontFace: face(run.fontFamily || element.fontFamily),
         fontSize: fontSize(run.fontSize),
         color: color(run.color || element.color),
-        bold: run.bold ?? element.bold ?? false,
+        bold: run.fontWeight !== undefined ? run.fontWeight >= 600 : run.bold ?? element.bold ?? false,
+        charSpacing: points(number(run.letterSpacing, number(element.letterSpacing, 0)) * scale),
         italic: run.italic ?? element.italic ?? false,
         underline: run.underline ?? element.underline ?? false,
         align,
