@@ -1,0 +1,48 @@
+{
+  "repository": "https://github.com/open-slide/open-slide",
+  "commit": "1f18ab5970fa5e68219b8ff1811799d5018122cd",
+  "evidence_id": "ev_fa46b0d80a01c3b52a40f41d0155b7875b5d0f5d0d5a21894f7b518d0325dc35",
+  "parent_evidence_id": "ev_da90ec733fbdf5f365a97dad35eebe600ce6ab646371a765704015fea9bceb2f",
+  "artifact_sha256": "a11ffec7c2543ed35ffae48fd00477988abeb7b5d6d588f78c2dd5f40ac9ad49",
+  "selection": {
+    "requested_paths": [
+      "src/app/components/inspector/inspector-panel.tsx",
+      "src/app/components/inspector/arrange-panel.tsx",
+      "src/app/components/style-panel/style-panel.tsx",
+      "src/app/components/asset-view.tsx"
+    ],
+    "unselected_files": 466
+  },
+  "statistics": {
+    "relevant_files": 470,
+    "nested_asar_containers": 0,
+    "text_bytes_read": 128643,
+    "invalid_utf8_files": 0,
+    "parsed_javascript_files": 4,
+    "visited_ast_nodes": 18547,
+    "findings": 258,
+    "modules": 0,
+    "parse_failures": 0
+  },
+  "coverage": "partial static source analysis; not proof of runtime behavior",
+  "limitations": [
+    "Boundary extraction covers unshadowed JSON/global coercions plus parse and validation method candidates.",
+    "Caller-selected source analysis leaves 466 inventoried files outside analysis scope. Inventory identity covers the complete artifact; relationships through unselected sources remain unknown.",
+    "Child-process extraction covers asynchronous node:child_process creation, literal argv/env/stdio options, exit/error listeners, and kill signals.",
+    "CommonJS and ESM binding relationships were recovered from inert syntax and resolved only within the inventoried artifact container.",
+    "Configuration extraction covers process.env, process.argv, node:fs reads, and direct logical defaults.",
+    "Event extraction covers EventEmitter-style literal registrations, removals, and dispatch candidates; dynamic names remain unknown.",
+    "Function fingerprints are static candidates; equal digests can remain ambiguous and do not prove behavioral equivalence.",
+    "Graph coverage is incomplete; unavailable facts remain explicit and must not be read as absence.",
+    "JavaScript and HTML were parsed as inert text; bundle bootstrap code was never executed.",
+    "Local data flow does not claim control-flow-sensitive reaching definitions or arbitrary dynamic property resolution.",
+    "Promise ownership covers explicit unshadowed Promise construction, static factories, aggregation, chaining, and await syntax only.",
+    "Request extraction covers fetch, WebSocket, node:http/node:https construction, direct option fields, and exact local response consumers.",
+    "Resource extraction covers built-in filesystem/network acquisition and exact local close/destroy/end handles.",
+    "Static imports, entrypoints, workers, endpoints, and storage relationships do not prove runtime execution.",
+    "Static paths and relationships may remain unresolved when expressions are dynamic or obfuscated.",
+    "The semantic graph contains static syntax observations and conservative relationship candidates; it does not claim runtime execution.",
+    "Timer extraction covers global or node:timers scheduling and exact local-handle cancellation.",
+    "Webpack/Rspack factories were recovered from AST literals; REA did not invoke push handlers or bundle bootstrap code."
+  ]
+}

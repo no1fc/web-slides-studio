@@ -7,6 +7,9 @@
     <link rel="stylesheet" href="/style.css" />
     <link rel="stylesheet" href="/data-grid.css" />
     <link rel="stylesheet" href="/editor-shell.css" />
+    <link rel="stylesheet" href="/assets-ui.css" />
+    <link rel="stylesheet" href="/arrange-panel.css" />
+    <link rel="stylesheet" href="/design-panel.css" />
     <script defer src="/jszip.min.js"></script>
     <script defer src="/text-model.js"></script>
     <script defer src="/object-model.js"></script>
@@ -29,6 +32,10 @@
     <script defer src="/editor-navigation.js"></script>
     <script defer src="/editor-icons.js"></script>
     <script defer src="/editor-shell.js"></script>
+    <script defer src="/assets-ui.js"></script>
+    <script defer src="/arrange-panel.js"></script>
+    <script defer src="/design-panel.js"></script>
+    <script defer src="/panel-integration.js"></script>
   </head>
   <body>
     <div id="toast" role="status" hidden></div>
@@ -311,6 +318,10 @@
                   <label>글자 크기<input id="fontValue" type="number" min="6" max="400" step="any" /></label>
                   <label>글자 색<input id="colorValue" type="color" /></label>
                 </div>
+                <div class="prop-grid">
+                  <label>글꼴 굵기<input id="fontWeightValue" type="number" min="300" max="800" step="100" /></label>
+                  <label>자간 px<input id="letterSpacingValue" type="number" min="-20" max="50" step="0.1" /></label>
+                </div>
                 <div class="text-emphasis" role="group" aria-label="문자 강조">
                   <button id="boldTextBtn" type="button" aria-pressed="false" title="굵게">굵게</button>
                   <button id="italicTextBtn" type="button" aria-pressed="false" title="기울임">기울임</button>
@@ -320,7 +331,7 @@
                   <summary>문단</summary>
                   <label>문단 정렬<select id="textAlignValue"><option value="left">왼쪽</option><option value="center">가운데</option><option value="right">오른쪽</option><option value="justify">양쪽</option></select></label>
                   <div class="prop-grid">
-                    <label>줄간격 배수<input id="lineHeightValue" type="number" min="0.5" max="4" step="any" /></label>
+                    <label>줄간격 배수<input id="lineHeightValue" type="number" min="0.5" max="5" step="any" /></label>
                     <label>문단 뒤 간격 px<input id="spaceAfterValue" type="number" min="0" max="200" step="any" /></label>
                   </div>
                   <div class="text-indent" role="group" aria-label="문단 들여쓰기">

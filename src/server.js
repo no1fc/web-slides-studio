@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { randomBytes, scryptSync, timingSafeEqual, createHash } from "node:crypto";
 import { Workflows } from "./workflows.js";
 import { Feedback } from "./feedback.js";
+import * as AssetLibrary from "./asset-library.js";
 import { withoutNotesHtml, withoutNotesDeck, redactNoteText } from "./notes-policy.js";
 import { Store } from "./store.js";
 import { PasswordStore } from "./auth.js";
@@ -145,7 +146,7 @@ export async function startStudio(opts = {}) {
       }
       res.setHeader(
         "Content-Security-Policy",
-        `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: ${contentOrigin}; frame-src ${contentOrigin}; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'`,
+        `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: ${contentOrigin}; frame-src ${contentOrigin}; connect-src 'self' https://api.svgl.app https://fonts.googleapis.com https://fonts.gstatic.com; object-src 'none'; base-uri 'none'; frame-ancestors 'none'`,
       );
       if (url.pathname === "/api/login" && req.method === "POST") {
         const key = req.socket.remoteAddress;
@@ -253,6 +254,26 @@ export async function startStudio(opts = {}) {
         }
         if(url.pathname==='/api/import/check' && req.method==='POST') {
           const input=await importArchive(await body(req,40*1024*1024));send(res,200,{slides:input.slides.length,files:input.files.size,title:input.title});return;
+        }
+        const assetRoute = /^\/api\/(?:decks\/([a-f0-9-]{36})\/)?asset-library$/.exec(url.pathname);
+        if (assetRoute) {
+          const id=assetRoute[1]||null, path=url.searchParams.get('path');
+          if(req.method==='GET' && path!==null) {
+            const file=await AssetLibrary.readAsset(store,id,path);
+            res.setHeader('Content-Security-Policy',"sandbox; default-src 'none'");
+            send(res,200,file.bytes,file.type);
+          } else if(req.method==='GET') send(res,200,await AssetLibrary.listAssets(store,id));
+          else if(req.method==='POST' && url.searchParams.get('copy')==='1') {
+            const b=await json(req);send(res,201,await AssetLibrary.copyAsset(store,b.fromDeckId??null,id,b.path,{collision:b.collision}));
+          } else if(req.method==='POST') send(res,201,await AssetLibrary.uploadAsset(store,id,{name:url.searchParams.get('name'),bytes:await body(req,12*1024*1024),collision:url.searchParams.get('collision')||'rename'}));
+          else if(req.method==='PATCH') {const b=await json(req);send(res,200,await AssetLibrary.renameAsset(store,id,b.path,b.name));}
+          else if(req.method==='DELETE') {
+            if(id&&[...jobs.values()].some(j=>j.deckId===id&&j.status==='working')) {send(res,409,{error:'다운로드 파일 생성이 끝난 후 삭제해 주세요.'});return;}
+            const b=await json(req);await AssetLibrary.deleteAsset(store,id,b.path);
+            for(const [key,job] of jobs)if(job.deckId===id)jobs.delete(key);
+            send(res,200,{ok:true});
+          } else send(res,405,{error:'지원하지 않는 요청'});
+          return;
         }
         if(url.pathname==='/api/templates') {
           if(req.method==='GET')send(res,200,await workflows.templates());
@@ -599,7 +620,7 @@ export async function startStudio(opts = {}) {
         return;
       }
       const p = url.pathname === "/" ? "index.html" : url.pathname.slice(1);
-      if (!["index.html", "help.html", "style.css", "app.js", "workflow-ui.js", "feedback-ui.js", "editor-navigation.js", "editor-shell.js", "editor-shell.css", "editor-icons.js", "editor-geist.woff2", "vendor-notices.txt", "upload-ui.js", "upload-check.js", "time.js", "ai-connection.js", "presenter.js", "presenter.html", "presenter.css", "preflight-ui.js", "authoring-ui.js", "slide-ui.js", "slide-model.js", "data-ui.js", "data-grid.css", "ribbon-ui.js", "link-ui.js", "data-model.js", "jszip.min.js", "text-model.js", "object-model.js"].includes(p)) {
+      if (!["index.html", "help.html", "style.css", "app.js", "workflow-ui.js", "feedback-ui.js", "editor-navigation.js", "editor-shell.js", "editor-shell.css", "assets-ui.js", "assets-ui.css", "arrange-panel.js", "arrange-panel.css", "design-panel.js", "design-panel.css", "panel-integration.js", "editor-icons.js", "editor-geist.woff2", "vendor-notices.txt", "upload-ui.js", "upload-check.js", "time.js", "ai-connection.js", "presenter.js", "presenter.html", "presenter.css", "preflight-ui.js", "authoring-ui.js", "slide-ui.js", "slide-model.js", "data-ui.js", "data-grid.css", "ribbon-ui.js", "link-ui.js", "data-model.js", "jszip.min.js", "text-model.js", "object-model.js"].includes(p)) {
         send(res, 404, { error: "페이지를 찾을 수 없습니다." });
         return;
       }
@@ -629,7 +650,7 @@ export async function startStudio(opts = {}) {
         return;
       }
       const url = new URL(req.url, contentOrigin);
-      if (["/_studio/presentation.js", "/_studio/bridge.js", "/_studio/text-model.js", "/_studio/text-editor.js", "/_studio/object-model.js", "/_studio/data-model.js", "/_studio/effects.js"].includes(url.pathname)) {
+      if (["/_studio/slide-model.js", "/_studio/presentation.js", "/_studio/bridge.js", "/_studio/text-model.js", "/_studio/text-editor.js", "/_studio/object-model.js", "/_studio/data-model.js", "/_studio/effects.js"].includes(url.pathname)) {
         send(
           res,
           200,
@@ -729,6 +750,7 @@ export async function startStudio(opts = {}) {
           audience: audience || url.searchParams.get("mode") === "audience",
           publishedAt: share ? meta.publishedAt || null : null,
           publishedRevision: share ? meta.publishedRevision : null,
+          sharedNotes: share && meta.shareIncludeNotes === true && !omitNotes,
           state: d.state,
           slides: d.slides,
         };
@@ -738,7 +760,7 @@ export async function startStudio(opts = {}) {
           .replace(/<head([^>]*)>/i, '<head$1><script src="/_studio/presentation.js"></script>' + bootstrap)
           .replace(
             /<\/body>/i,
-            `<script id="sd-config" type="application/json">${enc(config)}</script><script src="/_studio/text-model.js"></script><script src="/_studio/text-editor.js"></script><script src="/_studio/object-model.js"></script><script src="/_studio/data-model.js"></script><script src="/_studio/effects.js"></script><script src="/_studio/bridge.js"></script></body>`,
+            `<script id="sd-config" type="application/json">${enc(config)}</script><script src="/_studio/text-model.js"></script><script src="/_studio/text-editor.js"></script><script src="/_studio/object-model.js"></script><script src="/_studio/slide-model.js"></script><script src="/_studio/data-model.js"></script><script src="/_studio/effects.js"></script><script src="/_studio/bridge.js"></script></body>`,
           );
         send(res, 200, html, "text/html; charset=utf-8");
         return;

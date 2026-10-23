@@ -208,7 +208,7 @@ function validPatch(p) {
       throw new Error("크기 값 오류");
     if (k === "rotate" && !num(v, -360, 360)) throw new Error("회전 값 오류");
     if (k === "fontSize" && !num(v, 6, 400)) throw new Error("글꼴 크기 오류");
-    if (["color", "fill"].includes(k) && !/^#[\da-f]{6}$/i.test(v))
+    if (["color", "fill"].includes(k) && !(k === "fill" && v === "none") && !/^#[\da-f]{6}$/i.test(v))
       throw new Error("색상 값 오류");
     if (k === "hidden" && typeof v !== "boolean")
       throw new Error("표시 값 오류");
@@ -389,7 +389,7 @@ export function applyPatch(e, p) {
     e.style.color = p.color;
     e.style.webkitTextFillColor = p.color;
   }
-  if (p.fill) e.style.background = p.fill;
+  if (p.fill) e.style.background = p.fill === "none" ? "transparent" : p.fill;
   if (p.textMetricsScale !== undefined) e.setAttribute("data-sd-text-metrics-scale", String(p.textMetricsScale));
   if (p.richText !== undefined || p.textBox !== undefined) renderRichText(e, p.richText, p.textBox);
   if (p.layerPosition === "relative") {
@@ -482,6 +482,7 @@ export function renderDeck(html, state) {
   }
   for (const [id, scene] of Object.entries(state.scenes || {}))
     all.get(id)?.setAttribute("data-scene", scene);
+  Slides.applyDesignPreview(document, theme, state);
   if (!state.background) {
     const style = document.createElement("style");
     style.textContent = "#bg,canvas[data-background]{display:none!important}";

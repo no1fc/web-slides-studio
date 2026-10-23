@@ -1,0 +1,10 @@
+#inspector-design {display:flex;flex-direction:column;gap:12px;padding-top:12px}
+#inspector-design[hidden] {display:none}
+#inspector-design h3 {margin:0;font-size:14px}
+#inspector-design label {font-size:12px;color:var(--muted)}
+#inspector-design input {width:100%;height:32px;margin-top:4px}
+#inspector-design .design-actions {display:grid;grid-template-columns:1fr 1fr;gap:6px}
+#applyDesignBtn {grid-column:1/-1}
+.design-previewing #designPreviewStatus {color:var(--accent)}
+#headerAssetsBtn {background:transparent;border:0}
+@media(max-width:760px){#designPanelBtn,#headerAssetsBtn{display:none}}

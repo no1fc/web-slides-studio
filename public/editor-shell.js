@@ -108,7 +108,7 @@
   const scroll=el('div',undefined,'shell-inspector-scroll');inspector.append(scroll);
   const panels={};
   let inspectorTab='format';
-  for(const [key,name,label] of [['format','type','서식'],['arrange','move','배치'],['layers','layers','레이어']]){
+  for(const [key,name,label] of [['format','type','서식'],['arrange','move','배치'],['layers','layers','레이어'],['design','palette','디자인']]){
     const tab=button('inspector-'+key+'-tab',name,label,()=>setInspectorTab(key));
     tab.setAttribute('role','tab');tab.setAttribute('aria-controls','inspector-'+key);panelNav.append(tab);
     const panel=el('section');panel.id='inspector-'+key;panel.setAttribute('role','tabpanel');panel.setAttribute('aria-labelledby',tab.id);scroll.append(panel);panels[key]=panel;
@@ -144,5 +144,6 @@
   }
   new MutationObserver(syncInspector).observe(properties,{attributes:true,attributeFilter:['hidden']});
   function setPanel(open){if(!open&&inspector.contains(document.activeElement))panelToggle.focus();inspector.hidden=!open;editor.classList.toggle('inspector-closed',!open);panelToggle.setAttribute('aria-expanded',String(open));panelToggle.setAttribute('aria-pressed',String(open));}
+  window.SDEditorShell={openPanel(key){if(panels[key]){setInspectorTab(key);setPanel(true);}}};
   setInspectorTab('format');setPanel(innerWidth>=1024);
 })();

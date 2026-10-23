@@ -20,7 +20,7 @@ test('everyday editor settings, exact times, named history, independent template
  await openRibbonTab(page, 'file');assert.equal(await page.locator('#codeBtn').isVisible(),false);await clickEditorTool(page, 'deckInfoBtn');assert.match(await page.locator('#dialogBody').innerText(),/최초 업로드: \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \(KST\)/);await page.locator('#closeDialog').click();
  await clickEditorTool(page, 'versionsBtn');await page.getByRole('textbox',{name:'v1 이름'}).fill('원본 보존');await page.locator('#nameRevision1').click();await page.locator('#closeDialog').click();assert.equal((await app.store.revisions(deck.id))[0].name,'원본 보존');
  await openRibbonTab(page, 'slide');await clickEditorTool(page, 'saveTemplateBtn');await page.locator('#confirmSaveTemplateBtn').click();await page.locator('#dialog').waitFor({state:'hidden'});await clickEditorTool(page, 'templatesBtn');await page.getByRole('button',{name:'검증 자료',exact:true}).click();await page.locator('#createFromTemplateBtn').click();await page.locator('#dialog').waitFor({state:'hidden'});await ready(page);const copiedId=await page.evaluate(()=>deck.id);assert.notEqual(copiedId,deck.id);assert.equal((await app.store.get(copiedId)).state.order.length,2);
- await clickEditorTool(page, 'brandsBtn');await page.getByLabel('브랜드 이름',{exact:true}).fill('팀 브랜드');await page.getByLabel('강조색',{exact:true}).fill('#cc3300');await page.locator('#saveBrandBtn').click();await page.locator('#dialog').waitFor({state:'hidden'});await clickEditorTool(page, 'brandsBtn');await page.getByRole('button',{name:'팀 브랜드 적용'}).click();await page.locator('#dialog').waitFor({state:'hidden'});await ready(page);assert.equal((await app.store.get(copiedId)).state.theme.colors.accent,'#cc3300');assert.notEqual((await app.store.get(deck.id)).state.theme.colors.accent,'#cc3300');
+ await clickEditorTool(page, 'brandsBtn');await page.getByLabel('브랜드 이름',{exact:true}).fill('팀 브랜드');await page.locator('#dialog').getByLabel('강조색',{exact:true}).fill('#cc3300');await page.locator('#saveBrandBtn').click();await page.locator('#dialog').waitFor({state:'hidden'});await clickEditorTool(page, 'brandsBtn');await page.getByRole('button',{name:'팀 브랜드 적용'}).click();await page.locator('#dialog').waitFor({state:'hidden'});await ready(page);assert.equal((await app.store.get(copiedId)).state.theme.colors.accent,'#cc3300');assert.notEqual((await app.store.get(deck.id)).state.theme.colors.accent,'#cc3300');
  await openRibbonTab(page, 'format');await page.frameLocator('#deckFrame').locator('.slide.active h1').click();await page.screenshot({path:'/tmp/slides-everyday-editor-1366.png'});
 }));
 test('AI UI previews without saving, applies selected slide, restores and refuses stale proposal',()=>fixture(async({page,app,deck})=>{
@@ -48,4 +48,24 @@ test('comparison resolves each side by slide identity after reorder',()=>fixture
  const response=await fetch(app.origin+`/api/decks/${deck.id}/proposals`,{method:'POST',headers:{Origin:app.origin,'Content-Type':'application/json'},body:JSON.stringify({revision:1,state:next})});const proposal=await response.json();
  await openRibbonTab(page, 'file');await clickEditorTool(page, 'aiChangesBtn');await page.locator('#proposal-'+proposal.id).click();await page.frameLocator('.comparison iframe').nth(1).locator('.slide.active h1').filter({hasText:'두 번째'}).waitFor();await page.locator('.change-row').filter({has:page.locator('input[data-slide="s0"]')}).getByRole('button',{name:'이 장 비교'}).click();
  await page.frameLocator('.comparison iframe').nth(0).locator('.slide.active h1').filter({hasText:'첫 제목'}).waitFor();await page.frameLocator('.comparison iframe').nth(1).locator('.slide.active h1').filter({hasText:'AI first'}).waitFor();
+}));
+
+test('share note opt-in persists across publish, reopen and reload, and recipients can read it',()=>fixture(async({page,app,deck})=>{
+ await page.locator('#shareBtn').click();
+ const option=page.getByLabel('발표자 노트도 공유하기',{exact:false});
+ await option.check();await page.locator('#publishShareBtn').click();await page.locator('#stopShareBtn').waitFor();
+ assert.equal(await option.isChecked(),true,'published note inclusion remains selected');
+ await page.locator('#closeDialog').click();await page.reload();await ready(page);await page.locator('#shareBtn').click();
+ assert.equal(await option.isChecked(),true,'saved note setting survives reload');
+ const shared=(await fetch(app.origin+`/api/decks/${deck.id}`).then(r=>r.json())).shareUrl;
+ const recipient=await page.context().browser().newPage();await recipient.goto(shared);
+ await recipient.getByRole('button',{name:'발표자 노트 보기',exact:true}).click();
+ assert.match(await recipient.locator('#sd-shared-notes').innerText(),/PRIVATE-NOTES-123/);
+ await recipient.getByRole('button',{name:'다음 슬라이드',exact:true}).click();
+ assert.match(await recipient.locator('#sd-shared-notes').innerText(),/이 슬라이드에는 노트가 없습니다/);
+ await option.uncheck();const published=page.waitForResponse(r=>r.url().endsWith('/publish')&&r.request().method()==='POST');await page.locator('#publishShareBtn').click();assert.equal((await (await published).json()).shareIncludeNotes,false);await page.locator('#stopShareBtn').waitFor();
+ await recipient.reload();assert.equal(await recipient.locator('#sd-shared-notes').count(),0);
+ assert.ok(!(await recipient.content()).includes('PRIVATE-NOTES-123'));
+ assert.equal(await option.isChecked(),false);
+ await recipient.close();
 }));

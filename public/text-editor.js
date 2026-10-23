@@ -31,6 +31,10 @@
       if (parent === root) break;
     }
     const result = { fontFamily: c.fontFamily, fontSize: round(parseFloat(c.fontSize) / scale), color: color(c.color), bold: Number(c.fontWeight) >= 600, italic: c.fontStyle === "italic" || c.fontStyle === "oblique", underline };
+    const weight = Number(c.fontWeight), spacing = round((parseFloat(c.letterSpacing) || 0) / scale);
+    const explicitWeight = Number(node.closest("[data-sd-font-weight]")?.getAttribute("data-sd-font-weight"));
+    if (Number.isInteger(weight) && weight >= 300 && weight <= 800 && (![400, 700].includes(weight) || explicitWeight === weight)) result.fontWeight = weight;
+    if (spacing >= -20 && spacing <= 50) result.letterSpacing = spacing;
     if (preserveThemes) {
       const fontTheme = themeReference(node, root, "fontFamily", "data-sd-font-theme", ["heading", "body"], /^var\(\s*--sd-theme-(heading|body)-font\s*\)$/);
       const colorTheme = themeReference(node, root, "color", "data-sd-color-theme", ["text", "accent"], /^var\(\s*--sd-theme-(text|accent)\s*\)$/);
@@ -43,7 +47,7 @@
     const c = getComputedStyle(node), size = parseFloat(c.fontSize) || 16;
     const lineHeight = c.lineHeight === "normal" ? 1.2 : parseFloat(c.lineHeight) / size;
     const parent = node.parentElement;
-    return { align: ["left", "center", "right", "justify"].includes(c.textAlign) ? c.textAlign : "left", lineHeight: round(clamp(lineHeight, 0.5, 4)), spaceAfter: round(clamp(parseFloat(c.marginBottom) / scale || 0, 0, 200)), indent: clamp(Number(node.dataset.sdIndent) || 0, 0, 8), list: node.dataset.sdList || (node.tagName === "LI" ? parent?.tagName === "OL" ? "number" : "bullet" : "none") };
+    return { align: ["left", "center", "right", "justify"].includes(c.textAlign) ? c.textAlign : "left", lineHeight: round(clamp(lineHeight, 0.5, 5)), spaceAfter: round(clamp(parseFloat(c.marginBottom) / scale || 0, 0, 200)), indent: clamp(Number(node.dataset.sdIndent) || 0, 0, 8), list: node.dataset.sdList || (node.tagName === "LI" ? parent?.tagName === "OL" ? "number" : "bullet" : "none") };
   }
   function scan(el, preserveThemes = true) {
     const scale = Number(el.dataset.sdFontScale) || 1;
@@ -106,7 +110,7 @@
   function read(el) { return scan(el).rich; }
   function model(el) {
     if (!el.isContentEditable && el.dataset.sdRichText) {
-      try { return T.normalizeRichText(JSON.parse(el.dataset.sdRichText)); } catch { /* Read current DOM if an old marker is invalid. */ }
+      try { return T.resolveThemeFontSizes(el, JSON.parse(el.dataset.sdRichText)); } catch { /* Read current DOM if an old marker is invalid. */ }
     }
     return read(el);
   }
@@ -190,6 +194,7 @@
   function fit(el, rich = model(el), options = box(el)) {
     const content = el.querySelector(":scope > [data-sd-text-content]");
     if (!content || el.isContentEditable) return;
+    rich = T.resolveThemeFontSizes(el, rich);
     const pNodes = [...content.children].filter(n => n.hasAttribute("data-sd-paragraph"));
     const rootStyle = getComputedStyle(el), rootSize = parseFloat(rootStyle.fontSize) || 16;
     const metricsScale = Number(el.dataset.sdTextMetricsScale) || 1;
@@ -203,7 +208,10 @@
         node.style.fontSize = firstSize * scale + "px";
         node.style.marginBottom = (p.spaceAfter || 0) * scale + "px";
         node.style.paddingLeft = ((p.indent || 0) * 32 + (p.list && p.list !== "none" ? 24 : 0)) * metricsScale * scale + "px";
-        [...node.querySelectorAll("[data-sd-run]")].forEach((run, j) => { run.style.fontSize = (p.runs[j]?.fontSize || rootSize) * scale + "px"; });
+        [...node.querySelectorAll("[data-sd-run]")].forEach((run, j) => {
+          run.style.fontSize = (p.runs[j]?.fontSize || rootSize) * scale + "px";
+          run.style.letterSpacing = (p.runs[j]?.letterSpacing ?? (parseFloat(rootStyle.letterSpacing) || 0)) * scale + "px";
+        });
         const marker = node.querySelector("[data-sd-marker]");
         if (marker) { marker.style.left = (p.indent || 0) * 32 * metricsScale * scale + "px"; marker.style.width = 24 * metricsScale * scale + "px"; }
       });
