@@ -1,6 +1,6 @@
 {
   "name": "slides-studio-mcp",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "type": "module",
   "description": "Local stdio MCP adapter for Slides Studio's authenticated HTTP API",

@@ -58,7 +58,7 @@
     update.append(summary, el("p", "기존 연결 등록을 같은 이름으로 갱신합니다. 설치 폴더를 옮겼다면 해당 위치에서 마지막 두 명령을 실행하세요."), updateCommand, copy("업데이트 명령 복사", () => updateCommand.value)); body.append(update);
     const prompt = el("textarea"); prompt.id = "aiConnectionPrompt"; prompt.readOnly = true; prompt.rows = 5; prompt.style.width = "100%";
     prompt.setAttribute("aria-label", "AI에 전달할 연결 확인 프롬프트");
-    prompt.value = "Web Slides Studio의 slides_diagnose_connection 도구를 실행해 서버 접속, 인증, 도구 호출, ZIP 작업 폴더 결과와 MCP 버전을 확인해 주세요. 암호나 인증정보는 요청하거나 출력하지 마세요. 연결되면 자료 목록을 읽어 주세요. 기존 자료를 수정할 때는 현재 revision을 읽고 slides_propose_slide 또는 slides_propose_state로 변경안을 준비해 주세요. 저장본을 직접 덮어쓰지 말고 웹 편집기의 AI 변경 비교에서 선택 적용하도록 편집 링크를 주세요.";
+    prompt.value = "Web Slides Studio의 slides_diagnose_connection 도구를 실행해 서버 접속, 인증, 도구 호출, ZIP 작업 폴더 결과와 MCP 버전을 확인해 주세요. 암호나 인증정보는 요청하거나 출력하지 마세요. 연결되면 자료 목록을 읽어 주세요. 기존 자료를 수정할 때는 slides_list_feedback으로 열린 수정 요청과 대상 존재 여부를 확인하고 현재 revision을 읽고 slides_propose_slide 또는 slides_propose_state로 변경안을 준비해 주세요. 저장본을 직접 덮어쓰지 말고 웹 편집기의 AI 변경 비교에서 선택 적용하도록 편집 링크를 주세요.";
     body.append(el("p", "설치 후 AI 앱을 완전히 종료했다가 다시 열고, 새 대화에서 아래 내용을 전달하세요. 실행 중인 MCP는 파일 업데이트만으로 재시작되지 않습니다."), prompt, copy("연결 확인 프롬프트 복사", () => prompt.value));
     const diagnosis = el("section"); diagnosis.id = "aiConnectionStatus"; diagnosis.setAttribute("aria-live", "polite");
     const refresh = el("button", "최근 연결 보고 다시 확인");

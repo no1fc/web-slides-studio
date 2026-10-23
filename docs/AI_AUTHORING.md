@@ -115,3 +115,9 @@ python3 -m http.server 8000 --bind 127.0.0.1
 역할과 산출물을 명확히 구분하는 구성은 [agency-agents](https://github.com/msitarzewski/agency-agents)를 참고했습니다. 해당 저장소의 에이전트나 인격 지침을 그대로 복사하지 않았으며, Web Slides Studio의 실제 제약에 맞춰 작성했습니다. Codex와 Claude Code에 같은 스킬 폴더를 사용할 수 있지만 도구 연결과 권한 관리는 각 클라이언트에서 따로 설정합니다.
 
 공식 참고 문서: [Codex Skills](https://developers.openai.com/codex/skills/), [Codex MCP](https://developers.openai.com/codex/mcp/), [Claude Code Skills](https://code.claude.com/docs/en/skills), [Claude Code MCP](https://code.claude.com/docs/en/mcp).
+
+## 화면에서 수정 요청 전달
+
+개체 선택 후 **선택 개체에 AI 수정 요청**, 또는 파일 → **수정 요청 목록**에서 요청을 남깁니다. 목록의 프롬프트를 연결된 AI에 복사하면 `slides_list_feedback`으로 열린 요청과 대상 ID를 읽고, 최신 자료를 확인한 다음 기존 변경안 도구로 제출할 수 있습니다. 대상이 삭제됐거나 요청 후 자료가 달라졌다면 그대로 적용하지 않고 현재 상태를 확인합니다. 적용 결과를 보고 사용자가 완료/다시 열기를 선택합니다.
+
+수정 요청은 발표 콘텐츠와 별도 저장되므로 공유·발표자 화면·HTML/PPTX·템플릿에 포함하지 않습니다. MCP **0.4.0** 이상이 필요하며 기존 설치를 업데이트한 뒤 AI 앱/MCP를 재시작하세요. 수정 요청을 읽는 도구는 읽기 전용입니다.
