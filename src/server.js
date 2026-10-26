@@ -710,9 +710,10 @@ export async function startStudio(opts = {}) {
           : meta.revision
         : meta.publishedRevision;
       const p = safePath(decodeURIComponent(raw));
+      const frameAncestors = [origin, ...(share ? meta.shareEmbedOrigins || [] : [])].join(" ");
       res.setHeader(
         "Content-Security-Policy",
-        `sandbox allow-scripts allow-same-origin; default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; media-src 'self' blob:; connect-src 'none'; worker-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors ${origin}`,
+        `sandbox allow-scripts allow-same-origin; default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; media-src 'self' blob:; connect-src 'none'; worker-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors ${frameAncestors}`,
       );
       res.setHeader(
         "Permissions-Policy",
@@ -734,7 +735,7 @@ export async function startStudio(opts = {}) {
           const nonce = randomBytes(18).toString("base64");
           res.setHeader(
             "Content-Security-Policy",
-            `sandbox allow-scripts allow-same-origin; default-src 'none'; script-src 'nonce-${nonce}'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; media-src 'none'; connect-src 'none'; worker-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors ${origin}`,
+            `sandbox allow-scripts allow-same-origin; default-src 'none'; script-src 'nonce-${nonce}'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; media-src 'none'; connect-src 'none'; worker-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors ${frameAncestors}`,
           );
           send(res, 200, renderThumbnail(source, renderState, url.searchParams.get("slide"), nonce), "text/html; charset=utf-8");
           return;

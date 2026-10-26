@@ -15,6 +15,24 @@ async function fixture(fn){
  }finally{await browser?.close();await app.close();await rm(root,{recursive:true,force:true});}
 }
 const ready=page=>page.waitForFunction(()=>frameReady&&!dirty&&!saving&&!transitionBusy);
+test('per-deck iframe sites can be saved, reopened and cleared in the sharing dialog',()=>fixture(async({page,app,deck})=>{
+ await page.locator('#shareBtn').click();
+ const sites=page.getByLabel('iframe 허용 사이트 (한 줄에 하나)');
+ await sites.fill('https://PORTAL.example/\nhttps://school.example');
+ await page.locator('#publishShareBtn').click();await page.locator('#stopShareBtn').waitFor();
+ assert.equal(await sites.inputValue(),'https://portal.example\nhttps://school.example');
+ await page.locator('#closeDialog').click();await page.reload();await ready(page);await page.locator('#shareBtn').click();
+ assert.equal(await sites.inputValue(),'https://portal.example\nhttps://school.example');
+ await sites.fill('https://school.example/path');
+ const rejected=page.waitForResponse(r=>r.url().endsWith('/publish')&&r.request().method()==='POST');
+ await page.locator('#publishShareBtn').click();assert.equal((await rejected).status(),400);
+ assert.equal(await sites.inputValue(),'https://school.example/path');
+ await sites.fill('');
+ const saved=page.waitForResponse(r=>r.url().endsWith('/publish')&&r.request().method()==='POST');
+ await page.locator('#publishShareBtn').click();assert.equal((await saved).status(),200);
+ await page.waitForFunction(()=>document.querySelector('#shareEmbedOrigins')?.value==='');
+ assert.deepEqual((await app.store.meta(deck.id)).shareEmbedOrigins,[]);
+}));
 test('everyday editor settings, exact times, named history, independent template and brand workflow',()=>fixture(async({page,app,deck})=>{
  await page.locator('#editorSettingsBtn').click();await page.locator('#aiConnectionBtn').click();await page.getByRole('heading',{name:'AI 연결'}).waitFor();await page.keyboard.press('Escape');
  await openRibbonTab(page, 'file');assert.equal(await page.locator('#codeBtn').isVisible(),false);await clickEditorTool(page, 'deckInfoBtn');assert.match(await page.locator('#dialogBody').innerText(),/최초 업로드: \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \(KST\)/);await page.locator('#closeDialog').click();
