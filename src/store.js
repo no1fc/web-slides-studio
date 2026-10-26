@@ -12,6 +12,26 @@ import { randomUUID, randomBytes, scryptSync } from "node:crypto";
 import { parseHTML } from "linkedom";
 import { extractNotes, inheritNotes, initialState, validateState } from "./deck.js";
 import { authoringAssets } from "./authoring.js";
+
+function embedOrigins(value) {
+  if (!Array.isArray(value) || value.length > 20)
+    throw new Error("iframe 허용 사이트는 최대 20개까지 입력해 주세요.");
+  const origins = [...new Set(value.map(entry => {
+    const error = "iframe 허용 사이트는 경로 없이 http:// 또는 https:// 주소로 입력해 주세요. 와일드카드는 사용할 수 없습니다.";
+    if (typeof entry !== "string" || entry.length > 2048 || /[\x00-\x1f\x7f]/.test(entry)) throw new Error(error);
+    const text = entry.trim();
+    if (!/^https?:\/\/[^/?#\\\s]+\/?$/i.test(text)) throw new Error(error);
+    let url;
+    try { url = new URL(text); } catch { throw new Error(error); }
+    if (url.hostname.startsWith("[")) throw new Error("iframe 허용 사이트에는 IPv6 주소 대신 도메인 이름을 입력해 주세요.");
+    if (url.username || url.password || !/^[a-z0-9.-]+$/i.test(url.hostname)) throw new Error(error);
+    return url.origin;
+  }))];
+  // Keep the CSP below ordinary reverse-proxy response header buffers.
+  if (origins.join(" ").length > 2048) throw new Error("iframe 허용 사이트의 전체 주소 길이는 2,048자 이하여야 합니다.");
+  return origins;
+}
+
 export class Store {
   constructor(root) {
     this.root = root;
@@ -203,6 +223,10 @@ export class Store {
       if (enabled) {
         if (options.expiresAt && (!Number.isFinite(Date.parse(options.expiresAt)) || Date.parse(options.expiresAt) <= Date.now())) throw new Error("만료일은 현재보다 뒤의 시각으로 선택해 주세요.");
         if (options.password != null && (typeof options.password !== "string" || options.password.length > 128 || options.password.length > 0 && options.password.length < 4)) throw new Error("공유 암호는 4~128자로 입력해 주세요.");
+        const origins = embedOrigins(Object.hasOwn(options, "embedOrigins") ? options.embedOrigins : m.shareEmbedOrigins || []);
+        const passwordProtected = Object.hasOwn(options, "password") ? !!options.password : !!m.sharePassword;
+        if (origins.length && passwordProtected) throw new Error("암호 보호 공유는 새 창에서 열어야 합니다. iframe을 허용하려면 접근 암호를 해제해 주세요.");
+        m.shareEmbedOrigins = origins;
         m.publishedAt = new Date().toISOString();
         m.shareIncludeNotes = options.includeNotes === true;
         m.shareExpiresAt = options.expiresAt ? new Date(options.expiresAt).toISOString() : null;
@@ -257,6 +281,7 @@ export class Store {
         shareToken: null,
         publishedRevision: null,
         publishedAt: null, sharePassword: null, shareAccessVersion: null, shareExpiresAt: null,
+        shareEmbedOrigins: [],
         deleted: false,
       };
       await this.atomic(this.path(nid, "meta.json"), m);

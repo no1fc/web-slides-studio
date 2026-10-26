@@ -59,9 +59,13 @@
     const expiration=field(body,'링크 만료일시 (한국 시간 KST)','datetime-local',deck.shareExpiresAt?SDTime.format(deck.shareExpiresAt).replace(' ','T'):'');
     const password=field(body,'접근 암호 (선택)','password');password.autocomplete='new-password';password.maxLength=128;
     const removePassword=check(body,'기존 접근 암호 해제');
+    const sitesLabel=el('label','iframe 허용 사이트 (한 줄에 하나)'),sites=el('textarea');
+    sites.id='shareEmbedOrigins';sites.rows=3;sites.maxLength=40960;sites.placeholder='https://portal.example.com\nhttps://school.example.com';
+    sites.value=(deck.shareEmbedOrigins||[]).join('\n');sites.setAttribute('aria-describedby','shareEmbedHelp');sitesLabel.append(sites);body.append(sitesLabel);
+    const sitesHelp=el('p','최대 20개. 경로 없이 http:// 또는 https:// 주소를 입력하세요. 비우면 외부 삽입을 차단합니다. 공개 공유에만 적용되며, 링크 직접 접속은 제한하지 않습니다. 암호 보호 공유는 새 창에서 열어야 하므로 iframe 허용 시 기존 접근 암호를 해제하세요.');sitesHelp.id='shareEmbedHelp';body.append(sitesHelp);
     button(body,'publishShareBtn',deck.shareUrl?'이 설정으로 다시 게시':'공유 링크 만들기',action(async()=>{
       const expiresAt=expiration.value?new Date(expiration.value+':00+09:00').toISOString():null;
-      const options={enabled:true,includeNotes:notes.checked,expiresAt};if(password.value)options.password=password.value;else if(removePassword.checked)options.password=null;
+      const options={enabled:true,includeNotes:notes.checked,expiresAt,embedOrigins:sites.value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean)};if(password.value)options.password=password.value;else if(removePassword.checked)options.password=null;
       deck={...deck,...await api(`/decks/${deck.id}/publish`,'POST',options)};password.value='';$('dialog').close();$('shareBtn').click();
     })).className='primary';
     if(deck.shareUrl)button(body,'stopShareBtn','공유 종료',action(async()=>{deck={...deck,...await api(`/decks/${deck.id}/publish`,'POST',{enabled:false})};$('dialog').close();toast('공유 링크와 자산 접근을 종료했습니다.');}));
