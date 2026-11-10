@@ -154,10 +154,25 @@ const layouts = {
 };
 $("codeBtn").onclick = action(async () => {
   const slide = state.order[index];
-  const code = state.slideCode?.[slide] ||
-    await api("/decks/" + deck.id + "/authoring?slide=" + encodeURIComponent(slide));
-  const body = await authoringDialog("슬라이드 HTML/CSS/JavaScript 편집",
-    "현재 슬라이드의 기본 구성을 편집합니다. HTML을 바꿔 적용하면 이 슬라이드의 원본·코드 개체 수정값과 효과가 초기화됩니다(CSS·JavaScript만 바꾸면 유지). 별도로 추가한 글·이미지는 유지됩니다. JavaScript는 발표·공유 화면에서 이 슬라이드가 나타날 때 실행되며 편집 화면과 썸네일·PDF·PPTX에서는 실행하지 않습니다.");
+  // The server lists the deck-wide code; unsaved local edits win for the text shown.
+  const source = await api("/decks/" + deck.id + "/authoring?slide=" + encodeURIComponent(slide));
+  const code = state.slideCode?.[slide] || source;
+  const body = await authoringDialog("코드 편집 — 슬라이드 " + (index + 1) + " · 공통",
+    "이 슬라이드의 코드와 모든 슬라이드에 적용되는 공통 CSS·JavaScript를 함께 보고 고칩니다. 두 탭의 변경은 ‘검증하고 적용’ 한 번으로 같은 버전에 저장되며 실행 취소할 수 있습니다.");
+  const tabs = el("div", undefined, "authoring-actions"), panes = [el("div"), el("div")];
+  tabs.setAttribute("role", "tablist");
+  const show = (active) => panes.forEach((pane, i) => {
+    pane.hidden = i !== active;
+    tabs.children[i].setAttribute("aria-selected", String(i === active));
+    tabs.children[i].classList.toggle("primary", i === active);
+  });
+  for (const [i, [id, name]] of [["codeSlideTab", "이 슬라이드"], ["codeCommonTab", "공통 CSS·JavaScript (" + source.common.length + ")"]].entries()) {
+    const tab = el("button", name); tab.id = id; tab.type = "button"; tab.setAttribute("role", "tab"); tab.onclick = () => show(i); tabs.append(tab);
+  }
+  body.append(tabs, ...panes);
+  const [slidePane, commonPane] = panes;
+
+  slidePane.append(el("p", "HTML을 바꿔 적용하면 이 슬라이드의 원본·코드 개체 수정값과 효과가 초기화됩니다(CSS·JavaScript만 바꾸면 유지). 별도로 추가한 글·이미지는 유지됩니다. JavaScript는 발표·공유 화면에서 이 슬라이드가 나타날 때 실행되며 편집 화면과 썸네일·PDF·PPTX에서는 실행하지 않습니다.", "authoring-help"));
   const tools = el("div", undefined, "authoring-actions");
   const preset = el("select");
   preset.id = "layoutPreset";
@@ -168,24 +183,57 @@ $("codeBtn").onclick = action(async () => {
   const load = el("button", "선택한 구성 생성");
   load.id = "loadLayoutBtn";
   tools.append(preset, load);
-  body.append(tools);
-  const html = field(body, "슬라이드 내부 HTML", "codeHtml", code.html);
-  const css = field(body, "이 슬라이드에 적용할 CSS (@keyframes 사용 가능)", "codeCss", code.css);
-  const js = field(body, "슬라이드 진입 시 실행할 JavaScript — slide 변수가 이 슬라이드 요소입니다. 정리 함수를 return 하면 슬라이드를 떠날 때 호출됩니다.", "codeJs", code.js || "");
+  slidePane.append(tools);
+  const html = field(slidePane, "슬라이드 내부 HTML", "codeHtml", code.html);
+  const css = field(slidePane, "이 슬라이드에만 적용할 CSS (@keyframes 사용 가능)", "codeCss", code.css);
+  const js = field(slidePane, "슬라이드 진입 시 실행할 JavaScript — slide 변수가 이 슬라이드 요소입니다. 정리 함수를 return 하면 슬라이드를 떠날 때 호출됩니다.", "codeJs", code.js || "");
   js.placeholder = "const logo = slide.querySelector('img');\nconst a = logo.animate({ rotate: ['0deg', '360deg'] }, { duration: 3000, iterations: Infinity });\nreturn () => a.cancel();";
   load.onclick = () => {
     const layout = layouts[preset.value];
     html.value = layout.html; css.value = layout.css; authoringDraft = true;
   };
+
+  // Common code: one editor, switched by the selector; drafts are kept per entry.
+  const drafts = new Map(source.common.map(entry => [entry.key, state.common?.[entry.key] ?? entry.original]));
+  commonPane.append(el("p", "가져온 자료의 index.html <style>·<script>와 연결된 CSS·JS 파일입니다. 모든 슬라이드와 발표 동작(전환·3D 배경 등)에 영향을 주므로 적용 전 버전을 확인하세요. 가져온 원본 파일은 보존되고 수정본은 버전에 저장됩니다."
+    + (source.skipped.length ? " 크거나 압축된 파일은 제외했습니다: " + source.skipped.join(", ") : ""), "authoring-help"));
+  if (source.common.length) {
+    const chooser = el("select"); chooser.id = "commonSelect"; chooser.setAttribute("aria-label", "공통 코드 항목");
+    const title = (entry) => (entry.kind === "css" ? "CSS · " : "JS · ") + entry.label + (drafts.get(entry.key) !== entry.original ? " · 수정됨" : "");
+    for (const entry of source.common) { const option = el("option", title(entry)); option.value = entry.key; chooser.append(option); }
+    const revert = el("button", "이 항목을 가져온 원본으로 되돌리기"); revert.id = "commonRevertBtn"; revert.type = "button";
+    const row = el("div", undefined, "authoring-actions"); row.append(chooser, revert); commonPane.append(row);
+    const editor = field(commonPane, "공통 코드", "commonCode", drafts.get(chooser.value));
+    editor.rows = 24;
+    const entry = () => source.common.find(item => item.key === chooser.value);
+    const relabel = () => { chooser.selectedOptions[0].textContent = title(entry()); };
+    editor.oninput = () => { drafts.set(chooser.value, editor.value); relabel(); };
+    chooser.onchange = () => { editor.value = drafts.get(chooser.value); };
+    revert.onclick = () => { editor.value = entry().original; drafts.set(chooser.value, editor.value); relabel(); authoringDraft = true; };
+  } else commonPane.append(el("p", "이 자료에는 편집할 수 있는 공통 CSS·JavaScript가 없습니다.", "authoring-help"));
+  show(0);
+
   const error = errorField(body, "codeError");
+  const withCommon = (candidate) => {
+    candidate.common = { ...(candidate.common || {}) };
+    for (const entry of source.common) {
+      if (drafts.get(entry.key) === entry.original) delete candidate.common[entry.key];
+      else candidate.common[entry.key] = drafts.get(entry.key);
+    }
+    return candidate;
+  };
   command(body, "검증하고 적용", "codeApplyBtn", error, async () => {
-    const candidate = clone(state);
+    const candidate = withCommon(clone(state));
+    const slideChanged = html.value !== code.html || css.value !== code.css || js.value !== (code.js || "");
     if (html.value !== code.html) clearSlideSourcePatches(candidate, slide);
-    candidate.slideCode ||= {};
-    candidate.slideCode[slide] = { html: html.value, css: css.value, js: js.value };
+    // Leave an untouched imported slide on its source; only common code changes then.
+    if (slideChanged || state.slideCode?.[slide]) {
+      candidate.slideCode ||= {};
+      candidate.slideCode[slide] = { html: html.value, css: css.value, js: js.value };
+    }
     await applyAuthoring(candidate);
   });
-  command(body, "가져온 원본 구성으로 복원", "codeResetBtn", error, async () => {
+  command(body, "이 슬라이드를 가져온 원본 구성으로 복원", "codeResetBtn", error, async () => {
     const candidate = clone(state);
     clearSlideSourcePatches(candidate, slide);
     delete candidate.slideCode[slide];

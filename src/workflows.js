@@ -44,6 +44,7 @@ export class Workflows {
       if(input.revision!==deck.revision) throw conflict();
       const state=validateState(input.state,deck);
       // Proposals are the AI entry point: JS it adds or changes must stay inside the AI scope.
+      if(JSON.stringify(state.common)!==JSON.stringify(deck.state.common)) throw new Error('AI JavaScript 범위 밖: 공통 CSS·JavaScript는 AI가 바꿀 수 없습니다. 편집기의 코드 창에서 직접 수정하세요.');
       const script=(s,slide)=>s.slideCode[slide]?.js||'';
       for(const slide of Object.keys(state.slideCode)) if(script(state,slide)&&script(state,slide)!==script(deck.state,slide)) checkAiScript(script(state,slide));
       const source=await readFile(this.store.path(id,'assets/index.html'),'utf8');

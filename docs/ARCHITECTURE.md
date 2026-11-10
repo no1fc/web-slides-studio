@@ -40,7 +40,7 @@ flowchart LR
 
 복원은 선택한 과거 상태를 현재 기준 revision 위에 새 버전으로 저장합니다. 공유 링크는 게시한 revision에 고정되며 다시 게시할 때만 최신 내용으로 바뀝니다.
 
-상태는 `schemaVersion: 1`을 사용합니다. 과거 상태를 읽을 때 빠진 코드·마스터 필드를 보완하며 과거 revision 파일을 덮어쓰지 않습니다. `slideCode`에는 슬라이드별 HTML/CSS와 선택적 `js`(슬라이드 진입 시 `effects.js`가 호출하는 함수 본문, 편집 모드·썸네일에서는 미실행), `animations`에는 개체 ID별 효과 이름 또는 `{effect,duration,delay,loop}`, `masters`에는 공통 구성, `slideMasters`에는 연결을 저장합니다. `patches`에는 기존 위치·크기·내용에 더해 `locked`, `z`, `layerPosition`, `richText`, `textBox`를 저장할 수 있으며, 독립 HTML 복제 개체는 `added`에 포함됩니다. 알 수 없는 필드와 지원하지 않는 버전은 거절합니다.
+상태는 `schemaVersion: 1`을 사용합니다. 과거 상태를 읽을 때 빠진 코드·마스터 필드를 보완하며 과거 revision 파일을 덮어쓰지 않습니다. `slideCode`에는 슬라이드별 HTML/CSS와 선택적 `js`(슬라이드 진입 시 `effects.js`가 호출하는 함수 본문, 편집 모드·썸네일에서는 미실행), `animations`에는 개체 ID별 효과 이름 또는 `{effect,duration,delay,loop}`, `common`에는 자료 공통 코드의 수정본(`style:N`·`script:N`은 원본 index.html의 N번째 인라인 블록, `file:<경로>`는 연결된 CSS·JS 파일; 원본 자산은 불변이고 렌더링·콘텐츠 서빙·HTML 다운로드에서 대체), `masters`에는 공통 구성, `slideMasters`에는 연결을 저장합니다. `patches`에는 기존 위치·크기·내용에 더해 `locked`, `z`, `layerPosition`, `richText`, `textBox`를 저장할 수 있으며, 독립 HTML 복제 개체는 `added`에 포함됩니다. 알 수 없는 필드와 지원하지 않는 버전은 거절합니다.
 
 브라우저의 bridge는 실제 DOM의 선택과 좌표를 계산하고 일괄 변경을 부모 UI에 전달합니다. 부모는 명령 단위로 검증·history·저장을 처리합니다. 다중 조작 하나는 Undo 한 번에 대응하며, 드래그 취소는 선택 개체 전체를 되돌립니다. 복제·붙여넣기는 새 개체 ID와 독립 상태를 만들고 같은 자료 안의 앱 내부 복사 기능을 사용합니다.
 
