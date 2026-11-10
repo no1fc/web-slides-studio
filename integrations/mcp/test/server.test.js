@@ -211,6 +211,16 @@ test('AI proposals and diagnostics preserve the saved deck and report only obser
   await ok('slides_propose_slide', { deckId: deck.id, revision: deck.revision, slideId, html: '<h1>Review first</h1>', css: '' });
   assert.deepEqual((await ok('slides_get_deck', { deckId: deck.id })).state, before);
   assert.equal((await app.store.get(deck.id)).revision, deck.revision);
+  // Slide JavaScript: proposals only, inside the AI scope, shown to the reviewer and not run in the preview.
+  const scripted = await ok('slides_propose_slide', { deckId: deck.id, revision: deck.revision, slideId, html: '<h1>Motion</h1>', css: '', js: 'const a=slide.querySelector("h1").animate({opacity:[0,1]},{duration:300});return()=>a.cancel();' });
+  assert.match(scripted.changes.find(change => change.slide === slideId).jsAfter, /animate/);
+  assert.doesNotMatch(await (await fetch(scripted.afterUrl)).text(), /SDSlideScripts/);
+  for (const js of ['fetch("/x")', 'slide.ownerDocument.cookie', 'top.location="x"', 'slide.innerHTML="<img>"', 'slide["constr"+"uctor"]; this', 'slide.querySelector("a").click()', '\\u0066etch()'])
+    assert.match((await call('slides_propose_slide', { deckId: deck.id, revision: deck.revision, slideId, html: '<h1>x</h1>', css: '', js })).content[0].text, /AI JavaScript/, js);
+  assert.equal((await call('slides_update_slide', { deckId: deck.id, revision: deck.revision, slideId, html: '<h1>x</h1>', css: '', js: 'slide.hidden=true' })).isError, true);
+  const direct = structuredClone(before); direct.slideCode[slideId] = { html: '<h1>x</h1>', css: '', js: 'slide.hidden=true' };
+  assert.match((await call('slides_update_state', { deckId: deck.id, revision: deck.revision, state: direct })).content[0].text, /review_required/);
+  assert.deepEqual((await ok('slides_get_deck', { deckId: deck.id })).state, before);
   deck.state.notes[slideId] = 'Proposed notes';
   await ok('slides_propose_state', { deckId: deck.id, revision: deck.revision, state: deck.state, summary: 'Review notes' });
   assert.deepEqual((await ok('slides_get_deck', { deckId: deck.id })).state, before);

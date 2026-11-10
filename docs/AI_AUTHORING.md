@@ -29,7 +29,7 @@ ZIP 40 MiB, 압축 해제 64 MiB, 300파일, 1~80장 이내로 준비하세요.
 모든 장의 잘림·자산 누락·한글·이동·링크를 확인하세요.
 가능하면 Studio에 가져온 뒤 글 수정→저장→새로고침까지 검증하세요.
 MCP로 기존 자료를 수정할 때는 현재 상태와 revision을 읽고 slides_propose_slide 또는 slides_propose_state로 변경안을 만드세요. 웹 편집기의 AI 변경 비교에서 사용자가 선택 적용하기 전에는 저장본을 덮어쓰지 마세요. 충돌 시 최신 내용을 다시 확인하세요.
-HTML/CSS 편집창에는 슬라이드 내부 HTML/CSS만 넣고 JS·canvas를 붙이지 마세요.
+HTML 칸에는 슬라이드 내부 HTML만 넣고 script·canvas를 붙이지 마세요. 슬라이드 동작이 필요하면 slide 요소 안에서만 동작하는 JavaScript를 검토 제안으로 보내세요.
 PDF는 이미지이며, 편집 가능 PPTX도 3D·복잡한 CSS는 배경 이미지임을 알려 주세요.
 완료하면 ZIP/원본 파일 또는 편집 링크와 실제 검사 결과·미확인 항목을 주세요.
 ```
@@ -89,7 +89,8 @@ MCP 환경변수는 `SLIDES_STUDIO_URL`, `SLIDES_STUDIO_PASSWORD_FILE`(우선) �
 | 작업 | 지원 방법과 경계 |
 | --- | --- |
 | 새 HTML/Three.js 발표 | 원본 HTML ZIP에 로컬 JS와 자산 포함. 런타임에서 실행 |
-| 한 장의 HTML/CSS 수정 | 슬라이드 내부 HTML/CSS만 전달. JS·canvas·이벤트 속성·iframe·외부 자산·SVG 마크업은 거부 |
+| 한 장의 HTML/CSS 수정 | 슬라이드 내부 HTML/CSS만 전달. HTML 안의 script·canvas·이벤트 속성·iframe·외부 자산·SVG 마크업은 거부 |
+| 한 장의 JavaScript 수정 | 슬라이드별 JavaScript는 검토 제안(`slides_propose_slide`의 `js`)으로만 바꿀 수 있고 직접 저장은 거부됩니다. 허용 범위는 `slide` 요소 내부 DOM·`animate()`·타이머이며 `window`·`document`·네트워크·저장소·`innerHTML`·`eval` 등은 거부됩니다. 20,000자 이하. 검토 화면에 이전·제안 코드가 표시되고 비교 미리보기에서는 실행되지 않으며, 사람이 적용한 뒤에만 발표·공유에서 실행 |
 | Three.js 라이브러리 | 로컬 `.js`와 상대 모듈 경로 또는 브라우저 번들 사용. 라이선스 고지 유지 |
 | 3D 장면 | 기본 도형·절차적 그래픽 권장. `.gltf`, `.glb`, `.bin`, `.mjs`는 가져오기 미지원 |
 | 데이터 읽기 | `.json`은 포함 가능하지만 `fetch`/XHR/WebSocket은 로컬·외부 모두 차단. 필요한 값은 로컬 JS에 포함 |

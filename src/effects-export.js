@@ -13,7 +13,7 @@ export async function finalizeEffectsPptx(buffer, state, mappings) {
     let extra=transition==='fade'?'<p:transition spd="med" advClick="1"><p:fade/></p:transition>':transition==='push'?'<p:transition spd="med" advClick="1"><p:push dir="l"/></p:transition>':'';
     let next=5; const effects=[], builds=[];
     for (const mapping of mappings[index] || []) {
-      const effect=state.animations?.[mapping.rootId || mapping.id], id=names.get(mapping.name);
+      const raw=state.animations?.[mapping.rootId || mapping.id], name=typeof raw==='string'?raw:raw?.effect, effect=name==='appear'?name:['fade','slide-up','slide-down','slide-left','slide-right','zoom'].includes(name)?'fade':null, id=names.get(mapping.name);
       if(!id || !['appear','fade'].includes(effect)) continue;
       const behavior=`<p:tgtEl><p:spTgt spid="${id}"/></p:tgtEl>`;
       const set=`<p:set><p:cBhvr><p:cTn id="${next++}" dur="1" fill="hold"><p:stCondLst><p:cond delay="0"/></p:stCondLst></p:cTn>${behavior}<p:attrNameLst><p:attrName>style.visibility</p:attrName></p:attrNameLst></p:cBhvr><p:to><p:strVal val="visible"/></p:to></p:set>`;

@@ -14,7 +14,7 @@ test('table data and effects normalize, render safely and preserve old states', 
   assert.deepEqual(validateState(legacy,deck).animations, {});
 });
 test('data object properties and effects reject wrong targets and unsupported transforms', () => {
-  for (const mutate of [s=>s.transitions.s0='morph',s=>s.transitions.nope='fade',s=>s.animations.e0='fade',s=>s.animations['a-table']='spin',s=>s.added[0].rotate=20,s=>s.patches['a-table']={rotate:20},s=>s.patches.e0={table:{rows:[['x']]}},s=>s.added[0].text='replacement',s=>s.added[0].table.rows.push(['wrong'])]) {
+  for (const mutate of [s=>s.transitions.s0='morph',s=>s.transitions.nope='fade',s=>s.animations.nope='fade',s=>s.animations['a-table']='explode',s=>s.added[0].rotate=20,s=>s.patches['a-table']={rotate:20},s=>s.patches.e0={table:{rows:[['x']]}},s=>s.added[0].text='replacement',s=>s.added[0].table.rows.push(['wrong'])]) {
     const state=sample(); mutate(state); assert.throws(()=>validateState(state,deck));
   }
 });
