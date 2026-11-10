@@ -82,10 +82,12 @@ async function applyAuthoring(candidate) {
 }
 function clearSlideSourcePatches(candidate, slide) {
   const source = Object.hasOwn(candidate.clones, slide) ? candidate.clones[slide] : slide;
-  for (const e of deck.elements.filter(e => e.slide === source))
-    delete candidate.patches[slide === source ? e.id : slide + "--" + e.id];
-  for (const id of Object.keys(candidate.patches))
-    if (id.startsWith("c-" + slide + "--")) delete candidate.patches[id];
+  for (const e of deck.elements.filter(e => e.slide === source)) {
+    const id = slide === source ? e.id : slide + "--" + e.id;
+    delete candidate.patches[id]; delete candidate.animations?.[id];
+  }
+  for (const key of ["patches", "animations"]) for (const id of Object.keys(candidate[key] || {}))
+    if (id.startsWith("c-" + slide + "--")) delete candidate[key][id];
 }
 function duplicateAuthoring(old, id, source, target = state) {
   const state = target;
@@ -104,6 +106,7 @@ function duplicateAuthoring(old, id, source, target = state) {
     e.setAttribute("data-sd-id", after);
     ids.set(before, after);
     if (state.patches[before]) state.patches[after] = clone(state.patches[before]);
+    if (state.animations?.[before]) state.animations[after] = clone(state.animations[before]);
   }
   code.html = doc.body.innerHTML;
   code.css = remapCodeSelectors(code.css, ids);
@@ -153,8 +156,8 @@ $("codeBtn").onclick = action(async () => {
   const slide = state.order[index];
   const code = state.slideCode?.[slide] ||
     await api("/decks/" + deck.id + "/authoring?slide=" + encodeURIComponent(slide));
-  const body = await authoringDialog("슬라이드 HTML/CSS 편집",
-    "현재 슬라이드의 기본 구성을 편집합니다. 적용하면 이 슬라이드의 원본·코드 개체 수정값이 초기화됩니다. 별도로 추가한 글·이미지는 유지됩니다. 변경은 버전에 저장되며 실행 취소할 수 있습니다. 스크립트는 지원하지 않습니다.");
+  const body = await authoringDialog("슬라이드 HTML/CSS/JavaScript 편집",
+    "현재 슬라이드의 기본 구성을 편집합니다. HTML을 바꿔 적용하면 이 슬라이드의 원본·코드 개체 수정값과 효과가 초기화됩니다(CSS·JavaScript만 바꾸면 유지). 별도로 추가한 글·이미지는 유지됩니다. JavaScript는 발표·공유 화면에서 이 슬라이드가 나타날 때 실행되며 편집 화면과 썸네일·PDF·PPTX에서는 실행하지 않습니다.");
   const tools = el("div", undefined, "authoring-actions");
   const preset = el("select");
   preset.id = "layoutPreset";
@@ -167,7 +170,9 @@ $("codeBtn").onclick = action(async () => {
   tools.append(preset, load);
   body.append(tools);
   const html = field(body, "슬라이드 내부 HTML", "codeHtml", code.html);
-  const css = field(body, "이 슬라이드에 적용할 CSS", "codeCss", code.css);
+  const css = field(body, "이 슬라이드에 적용할 CSS (@keyframes 사용 가능)", "codeCss", code.css);
+  const js = field(body, "슬라이드 진입 시 실행할 JavaScript — slide 변수가 이 슬라이드 요소입니다. 정리 함수를 return 하면 슬라이드를 떠날 때 호출됩니다.", "codeJs", code.js || "");
+  js.placeholder = "const logo = slide.querySelector('img');\nconst a = logo.animate({ rotate: ['0deg', '360deg'] }, { duration: 3000, iterations: Infinity });\nreturn () => a.cancel();";
   load.onclick = () => {
     const layout = layouts[preset.value];
     html.value = layout.html; css.value = layout.css; authoringDraft = true;
@@ -175,9 +180,9 @@ $("codeBtn").onclick = action(async () => {
   const error = errorField(body, "codeError");
   command(body, "검증하고 적용", "codeApplyBtn", error, async () => {
     const candidate = clone(state);
-    clearSlideSourcePatches(candidate, slide);
+    if (html.value !== code.html) clearSlideSourcePatches(candidate, slide);
     candidate.slideCode ||= {};
-    candidate.slideCode[slide] = { html: html.value, css: css.value };
+    candidate.slideCode[slide] = { html: html.value, css: css.value, js: js.value };
     await applyAuthoring(candidate);
   });
   command(body, "가져온 원본 구성으로 복원", "codeResetBtn", error, async () => {

@@ -5,7 +5,7 @@ import { parseHTML } from 'linkedom';
 import { prepareDeck, renderDeck, validateState, initialState } from './deck.js';
 import { safePath } from './archive.js';
 import { collectFiles } from './files.js';
-import { codeIds } from './authoring.js';
+import { codeIds, checkAiScript } from './authoring.js';
 
 const conflict = () => Object.assign(new Error('다른 창에서 자료가 변경되었습니다. 최신 자료를 다시 열고 AI 변경을 확인해 주세요.'), {status:409});
 const uuid = value => { if (!/^[a-f0-9-]{36}$/.test(value)) throw new Error('항목 ID 오류'); return value; };
@@ -43,13 +43,16 @@ export class Workflows {
       const deck=await this.store.get(id);
       if(input.revision!==deck.revision) throw conflict();
       const state=validateState(input.state,deck);
+      // Proposals are the AI entry point: JS it adds or changes must stay inside the AI scope.
+      const script=(s,slide)=>s.slideCode[slide]?.js||'';
+      for(const slide of Object.keys(state.slideCode)) if(script(state,slide)&&script(state,slide)!==script(deck.state,slide)) checkAiScript(script(state,slide));
       const source=await readFile(this.store.path(id,'assets/index.html'),'utf8');
       const before=parseHTML(renderDeck(source,deck.state)).document, after=parseHTML(renderDeck(source,state)).document;
       const changes=[],owners=objectOwners(deck,deck.state,state);
       const allSlides=new Set([...deck.slides.map(s=>s.id),...Object.keys(deck.state.clones),...Object.keys(state.clones)]);
       for(const slide of allSlides) {
         const a=before.querySelector(`[data-sd-slide="${slide}"]`),b=after.querySelector(`[data-sd-slide="${slide}"]`);
-        if(a?.outerHTML!==b?.outerHTML || slideSnapshot(deck.state,slide,owners)!==slideSnapshot(state,slide,owners)) changes.push({slide,beforeText:a?.textContent.slice(0,4000)||'',afterText:b?.textContent.slice(0,4000)||'',kind:!a?'added':!b?'removed':'changed'});
+        if(a?.outerHTML!==b?.outerHTML || slideSnapshot(deck.state,slide,owners)!==slideSnapshot(state,slide,owners)) changes.push({slide,beforeText:a?.textContent.slice(0,4000)||'',afterText:b?.textContent.slice(0,4000)||'',kind:!a?'added':!b?'removed':'changed',...(script(deck.state,slide)!==script(state,slide)?{jsBefore:script(deck.state,slide),jsAfter:script(state,slide)}:{})});
       }
       if (['theme','background','masters','order'].some(key=>JSON.stringify(deck.state[key])!==JSON.stringify(state[key]))) changes.push({slide:'__global__',beforeText:'현재 순서·공통 디자인',afterText:'AI가 제안한 순서·공통 디자인',kind:'global'});
       const proposal={id:randomUUID(),baseRevision:deck.revision,beforeOrder:deck.state.order,state,summary:typeof input.summary==='string'?input.summary.slice(0,500):'AI 수정 제안',status:'pending',createdAt:new Date().toISOString(),changes};

@@ -171,6 +171,7 @@
       for (const item of deck.elements.filter(item => item.slide === source)) {
         const oldId = old === source ? item.id : `${old}--${item.id}`;
         if (candidate.patches[oldId]) candidate.patches[`${id}--${item.id}`] = clone(candidate.patches[oldId]);
+        if (candidate.animations[oldId]) candidate.animations[`${id}--${item.id}`] = clone(candidate.animations[oldId]);
       }
       const objectIds = new Map();
       for (const item of state.added.filter(item => item.slide === old)) {

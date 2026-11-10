@@ -4,6 +4,7 @@ import { record, normalizeCode, codeIds, renderAuthoring } from "./authoring.js"
 import "../public/text-model.js";
 import "../public/object-model.js";
 import "../public/slide-model.js";
+import "../public/effects.js";
 const { normalizeRichText, normalizeTextBox, renderRichText } = globalThis.SDText;
 const Objects = globalThis.SDObjects;
 const Slides = globalThis.SDSlides;
@@ -325,7 +326,10 @@ export function validateState(raw, deck) {
   strictRecord(state.transitions, "슬라이드 전환");
   strictRecord(state.animations, "개체 효과");
   for (const [id, value] of Object.entries(state.transitions)) if (!slideIds.has(id) || !["none", "fade", "push"].includes(value)) throw new Error("슬라이드 전환 값 오류");
-  for (const [id, value] of Object.entries(state.animations)) if (!state.added.some(a => a.id === id) || !["none", "appear", "fade"].includes(value)) throw new Error("추가 개체 효과 값 오류");
+  for (const [id, value] of Object.entries(state.animations)) {
+    if (!ids.has(id)) throw new Error("개체 효과 값 오류: 알 수 없는 요소입니다.");
+    globalThis.SDEffects.normalize(value);
+  }
   for (const [id, notes] of Object.entries(state.notes)) {
     if (!slideIds.has(id) || typeof notes !== "string" || notes.length > 20000)
       throw new Error("발표자 노트는 유효한 슬라이드의 20,000자 이내 텍스트여야 합니다.");

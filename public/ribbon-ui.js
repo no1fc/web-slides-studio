@@ -84,6 +84,7 @@
   $('ribbon-transition').append($('effectsBtn'));
   // Keep the design entry point while sharing the same effects editor.
   const effectShortcut=document.createElement('button'); effectShortcut.textContent='전환·효과…'; effectShortcut.onclick=()=>$('effectsBtn').click(); $('ribbon-slide').append(effectShortcut);
+  const codeShortcut=document.createElement('button'); codeShortcut.textContent='슬라이드 코드(HTML/CSS/JS)…'; codeShortcut.onclick=()=>$('codeBtn').click(); $('ribbon-slide').append(codeShortcut);
   $('ribbon-arrange').append(document.querySelector('.arrangement-panel'));
   group($('ribbon-arrange'), '앞뒤 순서', [document.querySelector('.layer-order-actions')]);
   document.querySelector('.inspector-tabs').append($('selectionCount'));

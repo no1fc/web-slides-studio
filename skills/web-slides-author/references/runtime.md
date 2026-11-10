@@ -37,7 +37,7 @@ Discover available tools and their schemas before use; hosts may prefix names.
 | Tool | Arguments | Use |
 | --- | --- | --- |
 | `slides_diagnose_connection` | `{}` | Report actual server/auth/tool/workspace checks, adapter version and report time without secrets |
-| `slides_propose_slide` | `deckId`, `revision`, `slideId`, `html`, `css` | Stage a slide proposal for human review; does not save over current state |
+| `slides_propose_slide` | `deckId`, `revision`, `slideId`, `html`, `css`, optional `js` | Stage a slide proposal for human review; does not save over current state. `js` is the body of `function(slide){}` run when the slide is shown (may return a cleanup function); omit to keep, `""` to remove. Max 20,000 chars. Only the `slide` subtree, `element.animate`, timers and plain values; `window`/`document`/`this`, navigation, network, storage, `eval`/`Function`/`import`, `innerHTML`/`setAttribute`/`href`/`src`, `click()`/`dispatchEvent`, `parentNode`/`closest` and `\u` escapes are refused with `script_scope`. Direct-save tools refuse any JavaScript change with `review_required` |
 | `slides_list_feedback` | `deckId`, optional `includeResolved` | Read private modification requests, their content revision and target/stale status; never automatically resolve |
 | `slides_propose_state` | `deckId`, `revision`, `state`, optional `summary` | Stage a complete state for human review |
 | `slides_list_decks` | `{}` | Find a deck |

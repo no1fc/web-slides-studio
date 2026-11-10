@@ -48,13 +48,17 @@ function checkCSS(css, inline = false) {
 
 export function normalizeCode(raw, slide, allowedIds = new Set(), master = false) {
   record(raw, "코드");
-  const keys = master ? ["name", "html", "css"] : ["html", "css"];
+  const keys = master ? ["name", "html", "css"] : ["html", "css", "js"];
   if (Object.keys(raw).some((key) => !keys.includes(key))) throw new Error("허용되지 않는 코드 항목입니다.");
   if (typeof raw.html !== "string" || raw.html.length > 200_000 || /<!doctype|<\/?(?:html|head|body)\b/i.test(raw.html))
     throw new Error("HTML에는 200,000자 이내의 슬라이드 내부 구성만 입력해 주세요.");
   if (master && (typeof raw.name !== "string" || !raw.name.trim() || raw.name.length > 100))
     throw new Error("마스터 이름은 1~100자로 입력해 주세요.");
   const css = checkCSS(raw.css);
+  // Slide JS is emitted inside an inline <script>; it must not be able to close it.
+  const js = raw.js ?? "";
+  if (typeof js !== "string" || js.length > 100_000 || /<\/script|<!--|\x00/i.test(js))
+    throw new Error("JavaScript는 100,000자 이내로 입력하고 </script 와 <!-- 는 사용하지 마세요.");
   const { document } = parseHTML("<html><head></head><body></body></html>");
   document.body.innerHTML = raw.html;
   const used = new Set();
@@ -94,7 +98,7 @@ export function normalizeCode(raw, slide, allowedIds = new Set(), master = false
       }
     }
   }
-  return { ...(master ? { name: raw.name.trim() } : {}), html: document.body.innerHTML, css };
+  return { ...(master ? { name: raw.name.trim() } : {}), html: document.body.innerHTML, css, ...(js.trim() ? { js } : {}) };
 }
 
 export function codeIds(html) {
@@ -142,6 +146,13 @@ export function renderAuthoring(document, slides, state) {
     const style = document.createElement("style");
     style.textContent = `@scope ([data-sd-slide="${id}"]) to ([data-sd-master]) {${code.css}}`;
     document.head.append(style);
+    if (code.js) {
+      // Registered only; effects.js calls it with the slide element when the slide is shown.
+      const script = document.createElement("script");
+      script.setAttribute("data-sd-slide-js", id);
+      script.textContent = `(globalThis.SDSlideScripts||={})[${JSON.stringify(id)}]=function(slide){\n${code.js}\n};`;
+      document.head.append(script);
+    }
   }
   for (const [id, masterId] of Object.entries(state.slideMasters || {})) {
     const slide = slides.get(id), master = state.masters?.[masterId];
@@ -157,4 +168,23 @@ export function renderAuthoring(document, slides, state) {
     style.textContent = `@scope ([data-sd-master-instance="${id}"]) {${master.css}}`;
     document.head.append(style);
   }
+}
+
+// Scope for JavaScript proposed by AI (review proposals only). It may work with the
+// `slide` element subtree, Web Animations, timers and plain values. Anything that
+// reaches the page, other frames, storage, the network, navigation or code
+// generation is refused. This is a static tripwire for reviewers, not a sandbox:
+// the content origin's CSP/sandbox and the human review remain the real boundary.
+const aiScriptLimit = 20_000;
+const aiScriptAnywhere = "window globalThis document ownerDocument getRootNode defaultView contentWindow contentDocument currentScript baseURI fetch XMLHttpRequest WebSocket EventSource sendBeacon RTCPeerConnection Worker SharedWorker serviceWorker importScripts eval Function import require cookie localStorage sessionStorage indexedDB caches postMessage BroadcastChannel MessageChannel innerHTML outerHTML insertAdjacentHTML setHTMLUnsafe srcdoc createContextualFragment DOMParser Range setAttribute setAttributeNS setAttributeNode attributes href src srcset action dispatchEvent click submit constructor __proto__ prototype Reflect Proxy this arguments caller callee parentNode parentElement offsetParent closest SDSlideScripts SDEffects __sd".split(" ");
+// Ambient globals that are also ordinary property names (style.top, {top: ...}).
+const aiScriptBare = "top parent opener location history navigator open close frames self origin name status".split(" ");
+export function checkAiScript(js) {
+  if (js.length > aiScriptLimit) throw new Error(`AI가 작성하는 JavaScript는 ${aiScriptLimit.toLocaleString("en-US")}자까지 허용합니다.`);
+  if (/\\[ux]/i.test(js)) throw new Error("AI JavaScript 범위 밖: \\u·\\x 이스케이프는 사용할 수 없습니다.");
+  const found = new Set();
+  for (const word of js.match(/[A-Za-z_$][\w$]*/g) || []) if (aiScriptAnywhere.includes(word)) found.add(word);
+  for (const match of js.matchAll(/(?<![.\w$])([A-Za-z_$][\w$]*)(?!\s*:)/g)) if (aiScriptBare.includes(match[1])) found.add(match[1]);
+  if (/\.\s*view\b/.test(js)) found.add(".view");
+  if (found.size) throw new Error("AI JavaScript 범위 밖: " + [...found].slice(0, 12).join(", ") + " 은(는) 사용할 수 없습니다. slide 요소 내부의 DOM·애니메이션·타이머만 다루세요.");
 }

@@ -126,7 +126,12 @@ export class StudioClient {
       response = await this.#fetch(path, method, body, raw);
     }
     if (!response.ok) {
-      await response.body?.cancel();
+      // Only the fixed-vocabulary script scope refusal is relayed; other server text stays hidden.
+      if (response.status === 400) {
+        const reason = await response.json().then(body => body?.error, () => '');
+        if (typeof reason === 'string' && /^AI(가 작성하는)? JavaScript/.test(reason)) fail('script_scope', reason.slice(0, 400));
+      }
+      if (!response.bodyUsed) await response.body?.cancel();
       if (response.status === 409) fail('revision_conflict', 'HTTP 409: the deck changed. Reload it, merge your intended edits, and use its latest revision. The save was not retried.');
       if (response.status === 401 || response.status === 403) fail('authentication', 'Studio refused authentication or the configured origin.');
       if (response.status === 404) fail('not_found', 'The requested deck or slide was not found.');

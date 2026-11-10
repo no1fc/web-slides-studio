@@ -142,12 +142,20 @@
   $('addChartBtn').onclick=action(()=>dataDialog('chart'));
   $('editDataBtn').onclick=action(()=>dataDialog(nativeAdded(selected?.id)?.kind,selected?.id));
   $('effectsBtn').onclick=action(()=>{
-    const slide=state.order[index], object=selected && nativeAdded(selected.id), body=dialog('전환·개체 효과');
+    const slide=state.order[index], id=selected?.id, locked=!id||objectLocked(id), body=dialog('전환·개체 효과'), presets=globalThis.SDEffects.presets;
     const choice=(id,choices,value)=>{const select=el('select');select.id=id;for(const [v,n] of choices){const o=el('option',n);o.value=v;select.append(o);}select.value=value||'none';return select;};
+    const number=(id,value,max)=>{const input=el('input');input.id=id;input.type='number';input.min=0;input.max=max;input.step=0.1;input.value=value;input.disabled=locked;return input;};
     const transition=choice('transitionValue',[['none','없음'],['fade','페이드'],['push','왼쪽으로 밀기']],state.transitions[slide]);body.append(label('현재 슬라이드 전환',transition));
-    const animation=choice('animationValue',[['none','없음'],['appear','나타내기'],['fade','페이드']],object&&state.animations[object.id]);animation.disabled=!object||objectLocked(object.id);body.append(label('선택한 추가 개체의 진입 효과',animation));
-    body.append(el('p','발표에서 슬라이드 진입 시 함께 재생합니다. 편집·썸네일·PDF는 최종 모습을 표시합니다. PPTX에서 이미지 배경으로 보존된 개체의 효과는 적용하지 않습니다.','tool-help'));
-    const apply=el('button','적용','primary');apply.id='applyEffectsBtn';apply.onclick=modalAction(async()=>{const candidate=clone(state);candidate.transitions[slide]=transition.value;if(object&&!objectLocked(object.id))candidate.animations[object.id]=animation.value;await commit(candidate,object?[object.id]:[]);$('dialog').close();},'효과 저장 중…');body.append(apply);
+    const saved=globalThis.SDEffects.normalize(id&&state.animations[id]||'none');
+    const animation=choice('animationValue',[['none','없음'],...Object.entries(presets).map(([v,p])=>[v,(p[3]?'모션 · ':'진입 · ')+p[0]])],saved.effect);animation.disabled=locked;body.append(label('선택한 개체의 효과',animation));
+    const duration=number('animationDuration',saved.duration/1000,20),delay=number('animationDelay',saved.delay/1000,20),loop=el('input');loop.id='animationLoop';loop.type='checkbox';loop.checked=saved.loop;loop.disabled=locked;
+    const row=el('div',undefined,'prop-grid');row.append(label('재생 시간(초)',duration),label('시작 지연(초)',delay),label('계속 반복',loop));body.append(row);
+    animation.onchange=()=>{const preset=presets[animation.value];if(preset){duration.value=preset[2]/1000;loop.checked=preset[3];}};
+    const value=()=>animation.value==='none'?'none':globalThis.SDEffects.compact({effect:animation.value,duration:Math.max(1,Math.round(duration.value*1000)),delay:Math.round(delay.value*1000),loop:loop.checked});
+    const error=el('p','','authoring-error');error.setAttribute('role','alert');
+    const preview=el('button','미리 보기');preview.id='previewEffectBtn';preview.disabled=locked;preview.onclick=()=>{error.textContent='';try{post('effect-preview',{id,value:value()});}catch(e){error.textContent=e.message;}};body.append(preview);
+    body.append(el('p','글·이미지·도형 등 선택한 개체에 적용합니다. 진입 효과는 발표에서 슬라이드가 나타날 때, 모션은 계속 반복 재생합니다. 지연 시간으로 순서를 만들 수 있습니다. 더 세밀한 움직임은 HTML/CSS/JS 편집의 @keyframes·JavaScript로 작성하세요. 편집·썸네일·PDF는 최종 모습을 표시하고, PPTX에는 나타내기·페이드로만 변환되며 모션은 제외됩니다.','tool-help'),error);
+    const apply=el('button','적용','primary');apply.id='applyEffectsBtn';apply.onclick=modalAction(async()=>{const candidate=clone(state);candidate.transitions[slide]=transition.value;if(!locked)candidate.animations[id]=value();await commit(candidate,id?[id]:[]);$('dialog').close();},'효과 저장 중…');body.append(apply);
   });
   $('pptxImportBtn').onclick=()=> $('pptxInput').click();
 })();

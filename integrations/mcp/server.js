@@ -21,6 +21,12 @@ const result = value => ({ content: [{ type: 'text', text: JSON.stringify(value)
 try {
   const studio = new StudioClient();
   const server = new McpServer({ name: 'slides-studio', version: VERSION });
+  // Direct saves skip human review, so they may not add, change or remove slide JavaScript.
+  async function sameScripts(id, next) {
+    const saved = (await studio.request(`/decks/${id}`)).state.slideCode || {}, script = (codes, slide) => codes?.[slide]?.js || '';
+    for (const slide of new Set([...Object.keys(saved), ...Object.keys(next.slideCode || {})]))
+      if (script(saved, slide) !== script(next.slideCode, slide)) throw new StudioError('review_required', 'Slide JavaScript can only be changed through slides_propose_slide or slides_propose_state so a person reviews the code.');
+  }
   function tool(name, description, shape, readOnlyHint, handler) {
     server.registerTool(name, {
       description, inputSchema: z.object(shape).strict(),
@@ -81,24 +87,26 @@ try {
     const source = await studio.request(`/decks/${deckId}/authoring?slide=${encodeURIComponent(slideId)}`);
     const after = await studio.request(`/decks/${deckId}`);
     if (before.revision !== after.revision) throw new StudioError('revision_conflict', 'The deck changed while reading its source. Reload before editing.');
-    return { ...studio.summary(after), deckId, slideId, html: source.html, css: source.css };
+    return { ...studio.summary(after), deckId, slideId, html: source.html, css: source.css, js: source.js || '' };
   });
-  tool('slides_update_state', 'Legacy direct save; use slides_propose_state for normal AI edits requiring review. Validate then save the full editable state using the revision returned by slides_get_deck. Preserve unrelated fields. On revision_conflict reload and merge; never blindly retry.', { deckId, revision, state }, false, async args => studio.save(args.deckId, args.revision, args.state));
+  tool('slides_update_state', 'Legacy direct save; use slides_propose_state for normal AI edits requiring review. Validate then save the full editable state using the revision returned by slides_get_deck. Preserve unrelated fields. On revision_conflict reload and merge; never blindly retry.', { deckId, revision, state }, false, async args => { await sameScripts(args.deckId, args.state); return studio.save(args.deckId, args.revision, args.state); });
   for (const proposed of [true, false]) tool(proposed ? 'slides_propose_slide' : 'slides_update_slide', proposed
-    ? 'Stage one slide HTML/CSS change for human before/after review. Leaves the saved deck unchanged. Preserves additions, notes and other slides. Use this by default for AI editing.'
-    : 'Legacy direct save. Use slides_propose_slide for normal AI edits requiring review. Replace one slide HTML fragment and scoped CSS; clears replaced source patches. Executable scripts are unsupported.', {
-    deckId, revision, slideId, html: z.string().max(200000), css: z.string().max(100000),
-  }, false, async ({ deckId, revision, slideId, html, css }) => {
+    ? 'Stage one slide HTML/CSS (and optional per-slide JavaScript) change for human before/after review. Leaves the saved deck unchanged. Preserves additions, notes and other slides. Use this by default for AI editing. js is the body of function(slide){...} run when the slide is shown; it may return a cleanup function. Omit js to keep the current script, pass "" to remove it. Allowed scope (max 20000 chars): the slide element subtree (querySelector, style, classList, textContent, addEventListener), element.animate, timers, requestAnimationFrame, Math/Date/JSON. Refused: window/document/globalThis/this, parent/top/location/navigator, network and storage APIs, eval/Function/import, innerHTML/setAttribute/href/src, click()/dispatchEvent, parentNode/closest, \\u escapes. The reviewer sees the code; it does not run in the comparison preview.'
+    : 'Legacy direct save. Use slides_propose_slide for normal AI edits requiring review. Replace one slide HTML fragment and scoped CSS; clears replaced source patches. JavaScript cannot be changed by direct save; existing slide JavaScript is kept.', {
+    deckId, revision, slideId, html: z.string().max(200000), css: z.string().max(100000), ...(proposed ? { js: z.string().max(20000).optional() } : {}),
+  }, false, async ({ deckId, revision, slideId, html, css, js }) => {
     const deck = await studio.request(`/decks/${deckId}`);
     if (deck.revision !== revision) throw new StudioError('revision_conflict', 'HTTP 409: the deck changed. Reload and merge your edits using the current revision.');
     if (!deck.state.order.includes(slideId)) throw new StudioError('not_found', 'The slide is not in the current deck order.');
     const candidate = deck.state;
     const source = Object.hasOwn(candidate.clones, slideId) ? candidate.clones[slideId] : slideId;
     for (const element of deck.elements.filter(element => element.slide === source))
-      delete candidate.patches[slideId === source ? element.id : slideId + '--' + element.id];
-    for (const id of Object.keys(candidate.patches))
-      if (id.startsWith('c-' + slideId + '--')) delete candidate.patches[id];
-    candidate.slideCode[slideId] = { html, css };
+      for (const key of ['patches', 'animations']) delete candidate[key]?.[slideId === source ? element.id : slideId + '--' + element.id];
+    for (const key of ['patches', 'animations']) for (const id of Object.keys(candidate[key] || {}))
+      if (id.startsWith('c-' + slideId + '--')) delete candidate[key][id];
+    // JavaScript changes only travel through reviewed proposals; otherwise the saved script is carried over.
+    const script = js ?? candidate.slideCode[slideId]?.js;
+    candidate.slideCode[slideId] = { html, css, ...(script ? { js: script } : {}) };
     return proposed ? studio.request(`/decks/${deckId}/proposals`, 'POST', { revision, state: candidate, summary: 'AI 슬라이드 수정 제안' }) : studio.save(deckId, revision, candidate);
   });
   tool('slides_import_bundle', 'Import a local HTML/Three.js ZIP as a new deck. Requires SLIDES_STUDIO_WORKSPACE; the .zip must be a regular file inside that directory, without symlinks, and at most 40 MiB. No remote URL, delete, or publication operation.', {

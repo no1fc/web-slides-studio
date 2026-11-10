@@ -1036,6 +1036,10 @@
       settleEdits();
       scanPresentation().then(issues => tell("preflight-result", {requestId:d.requestId, issues}));
     }
+    if (d.type === "effect-preview" && typeof d.id === "string") {
+      const target = document.querySelector(`[data-sd-id="${CSS.escape(d.id)}"]`);
+      try { if (target) effects?.preview(target, d.value); } catch { /* Invalid draft values are reported by the dialog. */ }
+    }
     if (d.type === "go") go(d.index);
     if (d.type === "patch" && typeof d.id === "string" && d.patch && typeof d.patch === "object") {
       const target = document.querySelector(`[data-sd-id="${CSS.escape(d.id)}"]`);

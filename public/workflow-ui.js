@@ -85,7 +85,9 @@
     const choices=[];
     for(const change of proposal.changes){const row=el('div',undefined,'change-row');const n=state.order.indexOf(change.slide);const input=check(row,change.slide==='__global__'?'공통 디자인·슬라이드 구성 변경':`슬라이드 ${n>=0?n+1:change.slide} 변경`,true);input.dataset.slide=change.slide;choices.push(input);
       button(row,'','이 장 비교',()=>{for(let i=0;i<frames.length;i++){const order=i?proposal.state.order:(proposal.beforeOrder||state.order);const position=change.slide==='__global__'?0:order.indexOf(change.slide);frames[i].hidden=position<0;emptyViews[i].hidden=position>=0;if(position>=0){const url=new URL(i?proposal.afterUrl:proposal.beforeUrl);url.hash=String(position+1);frames[i].dataset.slideIndex=String(position);frames[i].src=url.href;frames[i].contentWindow.postMessage({studio:true,type:'present-go',index:position},url.origin);}}});
-      row.append(el('pre',`이전: ${change.beforeText||'(텍스트 없음)'}\n이후: ${change.afterText||'(텍스트 없음)'}`));body.append(row);
+      row.append(el('pre',`이전: ${change.beforeText||'(텍스트 없음)'}\n이후: ${change.afterText||'(텍스트 없음)'}`));
+      if(change.jsAfter!==undefined){const warn=el('p','⚠ 이 슬라이드의 JavaScript가 바뀝니다. 아래 코드를 읽고 승인하세요. 비교 화면에서는 실행하지 않으며, 적용하면 발표·공유 화면에서 실행됩니다.','authoring-error');const code=el('pre',`— 이전 JavaScript —\n${change.jsBefore||'(없음)'}\n\n— AI 제안 JavaScript —\n${change.jsAfter||'(삭제)'}`);code.className='proposal-js';code.style.cssText='max-height:240px;overflow:auto;white-space:pre-wrap';row.append(warn,code);}
+      body.append(row);
     }
     const apply=button(body,'applyAIChangesBtn','선택한 변경 적용',action(async()=>{const slides=choices.filter(c=>c.checked).map(c=>c.dataset.slide);if(!slides.length)throw new Error('적용할 변경을 선택하세요.');try{if(!await saveMutation(`/decks/${deck.id}/proposals/${id}/apply`,{revision:deck.revision,slides}))return;toast('AI 변경을 새 버전으로 저장했습니다. 버전에서 이전 상태로 복원할 수 있습니다.');}catch(e){if(e.status===409){body.append(el('p','최신 저장본이 바뀌었습니다. 창을 닫고 자료를 다시 연 뒤 변경안을 새로 요청하세요.'));apply.disabled=true;}throw e;}}));
     apply.disabled=proposal.baseRevision!==deck.revision||!['pending',undefined].includes(proposal.status);

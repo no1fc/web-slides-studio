@@ -132,14 +132,14 @@ ZIP 40 MiB, 압축 해제 64 MiB, 300파일, 1~80장 이내로 준비하세요.
 모든 장의 잘림·자산 누락·한글·이동·링크를 확인하세요.
 가능하면 Studio에 가져온 뒤 글 수정→저장→새로고침까지 검증하세요.
 MCP로 기존 자료를 수정할 때는 현재 상태와 revision을 읽고 충돌 시 다시 확인하세요.
-HTML/CSS 편집창에는 슬라이드 내부 HTML/CSS만 넣고 JS·canvas를 붙이지 마세요.
+HTML 칸에는 슬라이드 내부 HTML만 넣고 script·canvas를 붙이지 마세요. 슬라이드 동작이 필요하면 slide 요소 안에서만 동작하는 JavaScript를 검토 제안으로 보내세요.
 PDF는 이미지이며, 편집 가능 PPTX도 3D·복잡한 CSS는 배경 이미지임을 알려 주세요.
 완료하면 ZIP/원본 파일 또는 편집 링크와 실제 검사 결과·미확인 항목을 주세요.</textarea></label>
         </details>
         <details><summary>Three.js·애니메이션을 사용할 때</summary>
           <p>Three.js는 <strong>원본 HTML ZIP에 로컬 .js 라이브러리</strong>로 포함합니다. 기본 도형·절차적 그래픽을 사용하세요. 외부 CDN·원격 자산·iframe·worker와 로컬·외부 fetch는 차단됩니다. .gltf·.glb·.bin·.mjs는 가져오지 않습니다.</p>
           <p>글은 canvas가 아닌 HTML 텍스트로 남기고 장식 canvas에는 <code>pointer-events:none</code>을 적용합니다. WebGL 실패·동작 줄이기 설정에서도 내용을 읽을 수 있는 정지 대안을 두세요. <code>#bg</code> 또는 <code>canvas[data-background]</code>는 배경 표시 설정에 연결됩니다. <code>data-scene</code> 장면은 원본 코드에서 구현해야 하며 임의 3D 모델·카메라의 시각 편집은 지원하지 않습니다.</p>
-          <p><b>HTML/CSS</b> 편집창은 슬라이드 내부 HTML/CSS만 받습니다. JavaScript·canvas를 붙일 수 없습니다. 실행 코드를 바꾸려면 원본 묶음을 수정해 새 자료로 가져오세요. PDF·PPTX의 3D는 정지 이미지입니다.</p>
+          <p><b>HTML/CSS/JS</b> 편집창의 HTML 칸은 슬라이드 내부 HTML만 받습니다(&lt;script&gt;·canvas 불가). 슬라이드별 동작은 JavaScript 칸에 쓰면 발표·공유에서 그 슬라이드가 나타날 때 실행됩니다. 개체 움직임은 전환·효과에서 진입 효과나 반복 모션을 고르세요. 원본 묶음의 실행 코드를 바꾸려면 묶음을 수정해 새 자료로 가져오세요. PDF·PPTX의 3D는 정지 이미지입니다.</p>
         </details>
         <details><summary>Codex·Claude Code 스킬과 MCP 연결</summary>
           <p><b>web-slides-author</b> 스킬은 작성자·디자이너·검수자 순서로 발표를 만듭니다. MCP를 연결하면 AI가 자료 목록과 현재 버전을 읽고, 허용된 ZIP을 가져오거나 한 장을 수정할 수 있습니다. 변경 충돌 시에는 최신 상태를 다시 읽습니다.</p>
