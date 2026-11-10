@@ -22,6 +22,7 @@ export async function exportDeck({ store, deck, format, url, contentOrigin, incl
     for (const p of await collectFiles(root)) {
       if (p === "index.html") continue;
       let bytes=await readFile(join(root,p));
+      if (deck.state.common?.["file:" + p] !== undefined) bytes = Buffer.from(deck.state.common["file:" + p]);
       if(!includeNotes && /\.(html|js|json|css|svg)$/i.test(p)) {
         let text=bytes.toString('utf8');
         text=/\.html$/i.test(p)?withoutNotesHtml(text,originalDeck):redactNoteText(text,originalDeck);

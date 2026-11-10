@@ -1,6 +1,6 @@
 import { parseHTML } from "linkedom";
 import "../public/data-model.js";
-import { record, normalizeCode, codeIds, renderAuthoring } from "./authoring.js";
+import { record, normalizeCode, codeIds, renderAuthoring, normalizeCommon, applyCommon } from "./authoring.js";
 import "../public/text-model.js";
 import "../public/object-model.js";
 import "../public/slide-model.js";
@@ -99,11 +99,12 @@ export function initialState(deck) {
     theme: Slides.normalizeTheme(),
     transitions: {},
     animations: {},
+    common: {},
   };
   state.notes = initialNotes(deck, {}, state);
   return state;
 }
-const stateKeys = new Set(["schemaVersion", "order", "patches", "added", "clones", "scenes", "background", "slideCode", "masters", "slideMasters", "notes", "slideLayouts", "theme", "transitions", "animations"]);
+const stateKeys = new Set(["schemaVersion", "order", "patches", "added", "clones", "scenes", "background", "slideCode", "masters", "slideMasters", "notes", "slideLayouts", "theme", "transitions", "animations", "common"]);
 function strictRecord(value, label, allowed) {
   record(value, label);
   for (const key of Reflect.ownKeys(value)) {
@@ -145,7 +146,7 @@ export function migrateState(raw) {
     }
   }
   state.schemaVersion = 1;
-  for (const key of ["clones", "scenes", "slideCode", "masters", "slideMasters", "notes", "slideLayouts", "transitions", "animations"]) {
+  for (const key of ["clones", "scenes", "slideCode", "masters", "slideMasters", "notes", "slideLayouts", "transitions", "animations", "common"]) {
     if (!Object.hasOwn(state, key)) state[key] = {};
     record(state[key], key);
   }
@@ -323,6 +324,7 @@ export function validateState(raw, deck) {
     }
   }
   if (total > 500) throw new Error("그룹 내부를 포함한 추가 요소는 500개까지 사용할 수 있습니다.");
+  normalizeCommon(state.common);
   strictRecord(state.transitions, "슬라이드 전환");
   strictRecord(state.animations, "개체 효과");
   for (const [id, value] of Object.entries(state.transitions)) if (!slideIds.has(id) || !["none", "fade", "push"].includes(value)) throw new Error("슬라이드 전환 값 오류");
@@ -373,6 +375,7 @@ export function validateState(raw, deck) {
     theme: state.theme,
     transitions: state.transitions,
     animations: state.animations,
+    common: state.common,
   };
 }
 export function applyPatch(e, p) {
@@ -414,6 +417,7 @@ export function applyPatch(e, p) {
 }
 export function renderDeck(html, state) {
   const { document } = parseHTML(html);
+  applyCommon(document, state);
   const originals = [...document.querySelectorAll("[data-sd-slide]")];
   const parent = originals[0].parentElement;
   const all = new Map(

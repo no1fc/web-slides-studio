@@ -188,3 +188,52 @@ export function checkAiScript(js) {
   if (/\.\s*view\b/.test(js)) found.add(".view");
   if (found.size) throw new Error("AI JavaScript 범위 밖: " + [...found].slice(0, 12).join(", ") + " 은(는) 사용할 수 없습니다. slide 요소 내부의 DOM·애니메이션·타이머만 다루세요.");
 }
+
+// Deck-wide ("common") code: the imported package's inline <style>/<script> blocks in
+// index.html and the local .css/.js files it links. The source stays immutable; the
+// state stores text overrides keyed by style:N / script:N (document order in the
+// source) or file:<path>. It is the same trust level as the uploaded package.
+const commonLimit = 300_000;
+const commonKey = /^(?:style:\d{1,3}|script:\d{1,3}|file:[\w./-]{1,200}\.(?:css|js))$/i;
+const inlineBlocks = (document) => ({
+  style: [...document.querySelectorAll("style")],
+  script: [...document.querySelectorAll("script")].filter((script) => !script.hasAttribute("src") && /^(?:|text\/javascript|module)$/i.test(script.getAttribute("type") || "")),
+});
+export function normalizeCommon(raw) {
+  record(raw, "공통 코드");
+  const entries = Object.entries(raw);
+  if (entries.length > 50) throw new Error("공통 코드는 50개 항목까지 수정할 수 있습니다.");
+  for (const [key, text] of entries) {
+    if (!commonKey.test(key)) throw new Error("공통 코드 항목 이름 오류");
+    if (key.startsWith("file:")) localAsset(key.slice(5));
+    if (typeof text !== "string" || text.length > commonLimit || text.includes("\x00")) throw new Error("공통 코드는 항목마다 300,000자까지 입력할 수 있습니다.");
+    if (key.startsWith("style:") && /<\/style/i.test(text)) throw new Error("공통 CSS에는 </style 을 쓸 수 없습니다.");
+    if (key.startsWith("script:") && /<\/script|<!--/i.test(text)) throw new Error("공통 JavaScript에는 </script 와 <!-- 를 쓸 수 없습니다.");
+  }
+  return raw;
+}
+export function applyCommon(document, state) {
+  const blocks = inlineBlocks(document);
+  for (const [key, text] of Object.entries(state.common || {})) {
+    const [kind, index] = key.split(":");
+    if (kind !== "file" && blocks[kind][index]) blocks[kind][index].textContent = text;
+  }
+}
+// read(path) resolves to the file text, or null when it is missing or too large to edit.
+export async function commonSources(html, state, read) {
+  const { document } = parseHTML(html), blocks = inlineBlocks(document), common = [], skipped = [];
+  const add = (key, label, kind, original) => common.push({ key, label, kind, original, text: state.common?.[key] ?? original });
+  blocks.style.forEach((element, index) => add("style:" + index, `index.html <style> ${index + 1}`, "css", element.textContent));
+  const linked = new Set();
+  for (const element of document.querySelectorAll('link[rel~="stylesheet"][href],script[src]')) {
+    const path = (element.getAttribute("href") ?? element.getAttribute("src")).replace(/[?#].*$/, "").replace(/^\.\//, "");
+    try { localAsset(path); } catch { continue; }
+    if (!/\.(?:css|js)$/i.test(path) || linked.has(path)) continue;
+    linked.add(path);
+    const original = /\.min\./i.test(path) ? null : await read(path);
+    if (original === null || original.length > commonLimit) skipped.push(path);
+    else add("file:" + path, path, /\.css$/i.test(path) ? "css" : "js", original);
+  }
+  blocks.script.forEach((element, index) => add("script:" + index, `index.html <script> ${index + 1}`, "js", element.textContent));
+  return { common, skipped };
+}

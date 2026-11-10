@@ -12,7 +12,7 @@ import { PasswordStore } from "./auth.js";
 import { inventory, sourceArchive, collectFiles } from "./files.js";
 import { importArchive, safePath } from "./archive.js";
 import { renderDeck, prepareDeck, validateState } from "./deck.js";
-import { authoringSource } from "./authoring.js";
+import { authoringSource, commonSources } from "./authoring.js";
 import { renderThumbnail } from "./thumbnail.js";
 const base = fileURLToPath(new URL("..", import.meta.url));
 const types = {
@@ -396,7 +396,8 @@ export async function startStudio(opts = {}) {
           if (action === "authoring" && req.method === "GET") {
             const d = await store.get(id);
             const html = await readFile(store.path(id, "assets/index.html"), "utf8");
-            send(res, 200, authoringSource(html, d.state, url.searchParams.get("slide")));
+            const read = async (path) => { try { const file = store.path(id, "assets", safePath(path)); return (await stat(file)).size > 1_200_000 ? null : await readFile(file, "utf8"); } catch { return null; } };
+            send(res, 200, { ...authoringSource(html, d.state, url.searchParams.get("slide")), ...(await commonSources(html, d.state, read)) });
             return;
           }
           if (action === "validate" && req.method === "POST") {
@@ -774,6 +775,8 @@ export async function startStudio(opts = {}) {
       const info = await stat(file);
       if (!info.isFile()) throw new Error("파일 오류");
       let bytes=await readFile(file);
+      // Common code edits replace the linked file's text for the revision being served.
+      if (/\.(css|js)$/i.test(p)) { const edited = (await store.get(id, revision)).state.common?.["file:" + p]; if (edited !== undefined) bytes = Buffer.from(edited); }
       if((audiencePath || !preview&&meta.shareIncludeNotes===false || preview&&url.searchParams.get('omitNotes')==='1') && /\.(js|json|css|svg)$/i.test(p)) bytes=Buffer.from(redactNoteText(bytes.toString('utf8'),await store.get(id,revision)));
       send(res,200,bytes,types[extname(p).toLowerCase()] || "application/octet-stream");
     }),

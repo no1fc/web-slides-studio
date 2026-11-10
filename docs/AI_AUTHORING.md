@@ -91,6 +91,7 @@ MCP 환경변수는 `SLIDES_STUDIO_URL`, `SLIDES_STUDIO_PASSWORD_FILE`(우선) �
 | 새 HTML/Three.js 발표 | 원본 HTML ZIP에 로컬 JS와 자산 포함. 런타임에서 실행 |
 | 한 장의 HTML/CSS 수정 | 슬라이드 내부 HTML/CSS만 전달. HTML 안의 script·canvas·이벤트 속성·iframe·외부 자산·SVG 마크업은 거부 |
 | 한 장의 JavaScript 수정 | 슬라이드별 JavaScript는 검토 제안(`slides_propose_slide`의 `js`)으로만 바꿀 수 있고 직접 저장은 거부됩니다. 허용 범위는 `slide` 요소 내부 DOM·`animate()`·타이머이며 `window`·`document`·네트워크·저장소·`innerHTML`·`eval` 등은 거부됩니다. 20,000자 이하. 검토 화면에 이전·제안 코드가 표시되고 비교 미리보기에서는 실행되지 않으며, 사람이 적용한 뒤에만 발표·공유에서 실행 |
+| 공통 CSS·JavaScript | AI 도구로는 변경 불가(제안·직접 저장 모두 거부). 사람이 편집기 코드 창의 공통 탭에서 수정 |
 | Three.js 라이브러리 | 로컬 `.js`와 상대 모듈 경로 또는 브라우저 번들 사용. 라이선스 고지 유지 |
 | 3D 장면 | 기본 도형·절차적 그래픽 권장. `.gltf`, `.glb`, `.bin`, `.mjs`는 가져오기 미지원 |
 | 데이터 읽기 | `.json`은 포함 가능하지만 `fetch`/XHR/WebSocket은 로컬·외부 모두 차단. 필요한 값은 로컬 JS에 포함 |
